@@ -196,10 +196,12 @@ function addMiniDay(y, m, d, outside, todayS, selS) {
   if (ds === selS && ds !== todayS) el.classList.add('selected');
   if (state.events.some(e => e.date === ds)) el.classList.add('has-events');
   el.textContent = d;
-  el.addEventListener('click', () => {
-    state.currentDate = new Date(y, m, d);
-    renderAll();
-  });
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('aria-label', `${MONTHS[m]} ${d}`);
+  const nav = () => { state.currentDate = new Date(y, m, d); renderAll(); };
+  el.addEventListener('click', nav);
+  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(); } });
   miniGridEl.appendChild(el);
 }
 
@@ -208,9 +210,14 @@ function renderCalList() {
   calListEl.innerHTML = '';
   for (const [key, cat] of Object.entries(CATEGORIES)) {
     const el = document.createElement('div');
-    el.className = 'cal-item' + (state.activeCategories.has(key) ? ' active' : '');
+    const active = state.activeCategories.has(key);
+    el.className = 'cal-item' + (active ? ' active' : '');
+    el.setAttribute('role', 'checkbox');
+    el.setAttribute('aria-checked', String(active));
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', `${cat.label} calendar`);
     el.innerHTML = `<div class="cal-check" style="border-color:${cat.color};color:${cat.color}"></div><span class="cal-item-label">${cat.label}</span>`;
-    el.addEventListener('click', () => {
+    const toggle = () => {
       if (state.activeCategories.has(key)) {
         if (state.activeCategories.size > 1) state.activeCategories.delete(key);
       } else {
@@ -219,7 +226,9 @@ function renderCalList() {
       renderCalList();
       renderView();
       renderMiniCal();
-    });
+    };
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     calListEl.appendChild(el);
   }
 }
@@ -311,7 +320,11 @@ function renderTimeView(numDays) {
       chip.style.background = s.light;
       chip.style.color = s.dark;
       chip.textContent = e.title;
+      chip.setAttribute('role', 'button');
+      chip.setAttribute('tabindex', '0');
+      chip.setAttribute('aria-label', `${e.title}, all day, ${CATEGORIES[e.category]?.label || 'Work'}`);
       chip.addEventListener('click', ev => { ev.stopPropagation(); openModal(ds, e.id); });
+      chip.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); openModal(ds, e.id); } });
       cell.appendChild(chip);
     });
     cell.addEventListener('click', () => openModal(ds, null, null, true));
@@ -374,8 +387,12 @@ function renderTimeView(numDays) {
       const block = document.createElement('div');
       block.className = 'event-block';
       block.style.cssText = `top:${top}px;height:${height}px;left:calc(${c}/${numCols}*100% + 3px);width:calc(${1/numCols}*100% - 6px);background:${s.light};border-left-color:${s.color};color:${s.dark}`;
+      block.setAttribute('role', 'button');
+      block.setAttribute('tabindex', '0');
+      block.setAttribute('aria-label', `${ev.title}, ${formatTime12(ev.startTime)} to ${formatTime12(ev.endTime)}, ${CATEGORIES[ev.category]?.label || 'Work'}`);
       block.innerHTML = `<div class="eb-title">${esc(ev.title)}</div><div class="eb-time">${formatTime12(ev.startTime)} – ${formatTime12(ev.endTime)}</div>`;
       block.addEventListener('click', e => { e.stopPropagation(); openModal(ds, ev.id); });
+      block.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openModal(ds, ev.id); } });
       col.appendChild(block);
     });
     cols.appendChild(col);
@@ -400,6 +417,7 @@ function renderTimeView(numDays) {
     const indicator = document.createElement('div');
     indicator.className = 'now-indicator';
     indicator.id = 'now-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
     indicator.style.top = top + 'px';
     indicator.innerHTML = '<div class="now-dot"></div><div class="now-line"></div>';
     body.appendChild(indicator);
@@ -475,7 +493,11 @@ function addMonthCell(grid, y, m, d, outside, todayS) {
     pill.className = 'mv-event';
     pill.style.cssText = `background:${s.light};color:${s.dark};border-left-color:${s.color}`;
     pill.textContent = ev.allDay ? ev.title : `${formatTime12(ev.startTime)} ${ev.title}`;
+    pill.setAttribute('role', 'button');
+    pill.setAttribute('tabindex', '0');
+    pill.setAttribute('aria-label', `${ev.title}${ev.allDay ? ', all day' : `, ${formatTime12(ev.startTime)}`}, ${CATEGORIES[ev.category]?.label || 'Work'}`);
     pill.addEventListener('click', e => { e.stopPropagation(); openModal(ds, ev.id); });
+    pill.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openModal(ds, ev.id); } });
     cell.appendChild(pill);
   });
   if (events.length > MAX_MONTH_EVENTS) {
@@ -513,6 +535,9 @@ function renderAgendaView() {
       const s = catStyle(ev.category);
       const row = document.createElement('div');
       row.className = 'agenda-event';
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', `${ev.title}, ${ev.allDay ? 'all day' : `${formatTime12(ev.startTime)} to ${formatTime12(ev.endTime)}`}, ${CATEGORIES[ev.category]?.label || 'Work'}`);
       row.innerHTML = `
         <div class="agenda-time">${ev.allDay ? 'All day' : `${formatTime12(ev.startTime)} – ${formatTime12(ev.endTime)}`}</div>
         <div class="agenda-dot" style="background:${s.color}"></div>
@@ -521,6 +546,7 @@ function renderAgendaView() {
           ${ev.description ? `<div class="agenda-desc">${esc(ev.description)}</div>` : ''}
         </div>`;
       row.addEventListener('click', () => openModal(ds, ev.id));
+      row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(ds, ev.id); } });
       section.appendChild(row);
     });
     wrap.appendChild(section);
@@ -566,10 +592,12 @@ function renderYearView() {
       grid.appendChild(el);
     }
     card.appendChild(grid);
-    card.addEventListener('click', () => {
-      state.currentDate = new Date(year, m, 1);
-      switchView('month');
-    });
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `${MONTHS[m]} ${year}`);
+    const navToMonth = () => { state.currentDate = new Date(year, m, 1); switchView('month'); };
+    card.addEventListener('click', navToMonth);
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navToMonth(); } });
     wrap.appendChild(card);
   }
   viewEl.appendChild(wrap);
@@ -619,12 +647,20 @@ function closeModal() {
 
 function renderCatPicker() {
   catPicker.innerHTML = '';
+  catPicker.setAttribute('role', 'radiogroup');
+  catPicker.setAttribute('aria-label', 'Event category');
   for (const [key, cat] of Object.entries(CATEGORIES)) {
     const el = document.createElement('div');
-    el.className = 'cat-option' + (state.selectedCategory === key ? ' selected' : '');
+    const isSel = state.selectedCategory === key;
+    el.className = 'cat-option' + (isSel ? ' selected' : '');
     el.style.color = cat.color;
+    el.setAttribute('role', 'radio');
+    el.setAttribute('aria-checked', String(isSel));
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', `${cat.label} category`);
     el.innerHTML = `<span class="cat-dot" style="background:${cat.color}"></span>${cat.label}`;
     el.addEventListener('click', () => { state.selectedCategory = key; renderCatPicker(); });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); state.selectedCategory = key; renderCatPicker(); } });
     catPicker.appendChild(el);
   }
 }
@@ -698,7 +734,11 @@ function goToday() {
 function switchView(v) {
   state.currentView = v;
   localStorage.setItem('chronosView', v);
-  document.querySelectorAll('.view-switcher button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.querySelectorAll('.view-switcher button').forEach(b => {
+    const isActive = b.dataset.view === v;
+    b.classList.toggle('active', isActive);
+    b.setAttribute('aria-selected', String(isActive));
+  });
   renderAll();
 }
 
