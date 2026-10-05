@@ -1,0 +1,13 @@
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+
+[functions."ai-planner"]
+  timeout = 26
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
