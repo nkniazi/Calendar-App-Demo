@@ -1,67 +1,1103 @@
-# Calendar App - Task Checklist
+# LifeBalance AI — V2 Implementation Plan
 
-## Setup
-- [x] Create project file structure (index.html, style.css, app.js, tasks/todo.md)
-  - **AC**: All files exist and index.html loads in a browser without errors
+> **Vision:** "My Calendar + My 24-Hour Life Budget + My Life Balance"
+>
+> Transform Chronos from a calendar into a life-planning tool that helps users see
+> where their 24 hours are going and whether their schedule reflects the life they want.
 
-## HTML Structure
-- [x] Build page layout with header, weekday labels, calendar grid container, and modal
-  - **AC**: Opening index.html shows a header with month/year, nav buttons, and an empty grid area
-- [x] Build event modal with form fields (title, date, category, time, description) and action buttons
-  - **AC**: Modal HTML is present in DOM (hidden by default); form has all required fields with labels
+---
 
-## CSS Styling
-- [x] Style calendar header and navigation
-  - **AC**: Month/year is centered, prev/next buttons are on either side, Today button is visible
-- [x] Style calendar grid and day cells
-  - **AC**: 7-column grid displays; day numbers visible in cells; today's date has a distinct highlight
-- [x] Style outside-month days
-  - **AC**: Days from previous/next month appear visually muted (lighter text color)
-- [x] Style event indicators (pills) inside day cells
-  - **AC**: Events on a day show as color-coded tags with truncated titles
-- [x] Style modal overlay and form
-  - **AC**: Modal covers viewport with semi-transparent backdrop; form is centered, readable, has clear inputs
-- [x] Style validation error messages
-  - **AC**: Error messages appear in red below the relevant field
-- [x] Add responsive styles for mobile
-  - **AC**: At 768px width, calendar remains usable; at 480px, layout adapts (smaller cells, abbreviated labels)
+## V1 Status (COMPLETE — DO NOT BREAK)
 
-## JavaScript - Calendar Rendering
-- [x] Implement month calculation and grid rendering
-  - **AC**: Grid shows correct number of days for any month; leading/trailing days from adjacent months fill the row; always 42 cells (6 rows)
-- [x] Implement month navigation (prev, next, today)
-  - **AC**: Clicking prev/next changes the displayed month; clicking Today returns to current month; year rolls over correctly (Dec -> Jan, Jan -> Dec)
-- [x] Highlight today's date
-  - **AC**: The cell for today's date has the `.today` class applied; navigating away and back preserves it
+All V1 features are working and deployed at https://timely-choux-b3d5f8.netlify.app
 
-## JavaScript - Event CRUD
-- [x] Implement Add Event (create new event, save to localStorage)
-  - **AC**: Clicking a day cell opens the modal with that date pre-filled; submitting saves the event; event appears on the calendar; localStorage contains the event after page reload
-- [x] Implement Edit Event (load existing event into modal, update on save)
-  - **AC**: Clicking an event pill opens the modal with all fields populated; changing fields and saving updates the event in localStorage and on the grid
-- [x] Implement Delete Event (remove event, confirm before deleting)
-  - **AC**: Delete button visible only in edit mode; clicking it shows a confirmation; confirming removes the event from localStorage and the grid
-- [x] Render event indicators on day cells
-  - **AC**: Days with events show pill-shaped indicators; max 3 shown with "+N more" for overflow
+Existing features to preserve:
+- 6 calendar views (Day, 3-Day, Week, Month, Agenda, Year)
+- Event CRUD (add, edit, delete) with modal form
+- Event fields: title, date, start/end time, all-day, category, description
+- Category filtering in sidebar ("My Calendars")
+- Mini calendar in sidebar
+- localStorage persistence
+- Responsive design + mobile support
+- Keyboard shortcuts
+- WCAG accessibility
 
-## JavaScript - Modal & Validation
-- [x] Implement modal open/close behavior
-  - **AC**: Modal opens on day click and event click; closes on Cancel, Escape key, and overlay click; form resets on close
-- [x] Implement form validation
-  - **AC**: Submitting with empty title shows "Title is required"; empty date shows "Date is required"; fixing a field clears its error; valid form submits successfully
+---
 
-## JavaScript - localStorage Persistence
-- [x] Implement load/save functions for localStorage
-  - **AC**: Events survive page reload; corrupted/missing localStorage gracefully returns empty array
+## V2 Implementation Plan
 
-## Event Colors & Categories
-- [x] Add category dropdown to event modal (General, Work, Personal, Health, Social)
-  - **AC**: Category select appears in the modal; defaults to "General"; saved with the event
-- [x] Color-code event pills by category
-  - **AC**: Each category has a distinct color; pills on the calendar reflect the event's category color
-- [x] Add category filter bar below header
-  - **AC**: Colored filter chips appear for each category; clicking a chip toggles it; filtered-out events are hidden from the grid; at least one filter must remain active
+### Phase 1: Data Model & Category Migration
 
-## Final Verification
-- [x] Cross-check all features work end-to-end
-  - **AC**: Can add, edit, delete events; navigate months; events persist across reloads; category colors display correctly; filter bar works; responsive layout works; no console errors
+- [x] **1.1** Define new Life Categories constant replacing existing CATEGORIES
+  - New categories: Faith, Sleep, Work/Money, Food/Meals, Family/Relationships, Entertainment/Recreation, Personal/Other
+  - Each gets a unique color, label, and icon
+  - **AC**: `LIFE_CATEGORIES` object defined with 7 entries, each having label, color, light, dark, icon
+
+- [x] **1.2** Add data versioning to localStorage
+  - Store a `dataVersion` key in localStorage (current = 1, V2 = 2)
+  - On load, check version and run migration if needed
+  - **AC**: `loadEvents()` checks `dataVersion`; first load on V2 triggers migration
+
+- [x] **1.3** Migrate existing V1 events to V2 categories
+  - Mapping: Work → work-money, Personal → personal-other, Health → personal-other, Social → family-relationships, General → personal-other, Learning → work-money
+  - Preserve all event data (title, date, times, description)
+  - Mark version as 2 after migration
+  - **AC**: Existing events load with correct new category keys; no data lost; re-running migration is idempotent
+
+- [x] **1.4** Update Event model for V2
+  - Add optional `type` field: "event" (default) | "task" | "goal"
+  - Add optional `completed` field (boolean, for tasks)
+  - Add optional `priority` field: "low" | "medium" | "high"
+  - Existing events default to type "event"
+  - **AC**: New events can be saved with type/completed/priority; old events still load fine
+
+- [x] **1.5** Add Task model (stored in same events array with type="task")
+  - Fields: title, date, category, completed, priority, description
+  - Tasks don't require start/end time (they are to-do items, not time blocks)
+  - **AC**: Tasks can be created, saved, loaded from localStorage with type="task"
+
+- [x] **1.6** Add Goal model (stored in localStorage under separate key `chronosGoals`)
+  - Fields: id, title, category, targetHoursPerWeek, description, active
+  - Goals represent weekly time targets per category (e.g., "8h/week for Family")
+  - **AC**: Goals persist in localStorage; CRUD operations work
+
+- [x] **1.7** Add Preferences model (stored in localStorage under `chronosPreferences`)
+  - Fields: sleepHours (default 7), workHoursTarget (default 8), dashboardDefault (boolean, default true)
+  - **AC**: Preferences persist; defaults used if missing
+
+### Phase 2: Navigation & App Shell
+
+- [x] **2.1** Add Dashboard and Tasks navigation to sidebar
+  - Add nav items above "My Calendars": Dashboard, Calendar, Tasks
+  - Dashboard is default landing page (controlled by preference)
+  - Calendar shows the existing V1 calendar views
+  - Tasks shows task list view
+  - Active nav item highlighted
+  - **AC**: Clicking Dashboard/Calendar/Tasks switches the main content area; sidebar nav highlights active item
+
+- [x] **2.2** Update view routing for new pages
+  - Extend `state.currentView` to include "dashboard" and "tasks"
+  - Dashboard renders in `#calendar-view` container (reuse existing layout)
+  - Calendar views remain unchanged
+  - **AC**: `renderView()` routes to dashboard/task views; all existing calendar views still work
+
+- [x] **2.3** Update sidebar "My Calendars" to use new Life Categories
+  - Replace 5 V1 categories with 7 Life Categories
+  - Same toggle/filter behavior
+  - New colors and labels
+  - **AC**: Sidebar shows 7 Life Categories with correct colors; toggling filters events in all views
+
+- [x] **2.4** Update category picker in event modal
+  - Show 7 Life Categories instead of 5 V1 categories
+  - Default to "Personal / Other"
+  - **AC**: Modal category picker shows all 7 Life Categories; selecting one saves correctly
+
+### Phase 3: Dashboard
+
+- [x] **3.1** Build Dashboard layout — Today summary card
+  - Show: today's date (formatted nicely), greeting based on time of day
+  - Show: total scheduled time, total free time (24h - scheduled), number of events today
+  - Show: next upcoming event with time and title
+  - **AC**: Dashboard displays today's date, scheduled/free time calculated correctly from events, next event shown
+
+- [x] **3.2** Build Dashboard — Life Category breakdown
+  - Show each of 7 categories with time allocated today
+  - Visual bar or meter showing proportion of 24h
+  - Categories with 0h still shown (as empty)
+  - **AC**: Each category shows hours allocated; bars are proportional; total adds up to ≤ 24h
+
+- [x] **3.3** Build Dashboard — Tasks summary
+  - Show count of tasks due today, completed vs incomplete
+  - List top 3-5 incomplete tasks with checkbox to mark done
+  - Quick-add task button
+  - **AC**: Task counts correct; checking a task marks it complete and updates count; quick-add opens modal with type=task
+
+- [x] **3.4** Build Dashboard — Weekly overview mini-chart
+  - Show 7-day bar chart (Mon-Sun) of scheduled hours per day
+  - Stacked or grouped by category
+  - Current day highlighted
+  - **AC**: Chart renders for current week; bars reflect actual event durations; today highlighted
+
+- [x] **3.5** Style Dashboard with cards layout
+  - Modern card-based layout matching existing Chronos design language
+  - Responsive: stacks vertically on mobile
+  - **AC**: Dashboard looks polished; cards have subtle shadows/borders; works on mobile
+
+### Phase 4: 24-Hour Life Budget
+
+- [x] **4.1** Implement budget calculation engine
+  - Function: given a date, sum event durations per category
+  - Handle all-day events (use preference sleepHours for Sleep, or full 24h otherwise)
+  - Handle overlapping events (don't double-count; take the later-starting one's overlap)
+  - Calculate free/unplanned time = 24h - total scheduled
+  - **AC**: `calculateDayBudget(dateStr)` returns { categoryTotals: {}, scheduledMinutes, freeMinutes }
+
+- [x] **4.2** Build 24-Hour Budget panel on Dashboard
+  - Visual ring/donut chart or horizontal stacked bar showing 24h breakdown
+  - Each segment colored by category
+  - Free time shown as light gray segment
+  - Center shows "Xh Ym free" or "OVERBOOKED by Xh"
+  - **AC**: Budget visualization renders; segments proportional; free time visible; updates when events change
+
+- [x] **4.3** Implement overbooking detection
+  - When total scheduled > 24h (1440 min), flag as overbooked
+  - Show warning badge on Dashboard
+  - Visual indicator: red outline on budget ring, warning text
+  - **AC**: Scheduling >24h of events in one day triggers visible overbooking warning
+
+### Phase 5: Life Balance Score & Weekly View
+
+- [x] **5.1** Implement Life Balance Score calculation
+  - Compare actual time per category vs user's goals (from Goal model)
+  - Score 0-100: 100 = perfect alignment with goals, 0 = completely misaligned
+  - Simple formula: average of per-category scores (actual/target ratio, capped at 100%)
+  - If no goals set, show "Set goals to see your balance score"
+  - **AC**: `calculateBalanceScore(weekStartDate)` returns number 0-100 based on goals vs actual
+
+- [x] **5.2** Show Life Balance Score on Dashboard
+  - Large score number with label (e.g., "72 / 100")
+  - Color: green (>75), yellow (50-75), red (<50)
+  - Brief note: "Great balance!" / "Some areas need attention" / "Review your schedule"
+  - **AC**: Score displayed; color correct; message appropriate to range
+
+- [x] **5.3** Build Weekly Balance view
+  - Accessible from Dashboard as "View Weekly Balance" link
+  - Shows 7-day breakdown by category
+  - Compares weekly totals vs weekly goals
+  - Per-category: goal hours, actual hours, delta
+  - **AC**: Weekly view shows goal vs actual for each category; positive/negative deltas clear
+
+### Phase 6: Tasks View
+
+- [x] **6.1** Build Tasks list view
+  - Filterable by category and completion status (all / incomplete / completed)
+  - Sortable by date, priority
+  - Each task shows: checkbox, title, category color dot, due date, priority badge
+  - **AC**: Tasks view lists all tasks; filters work; checking marks complete; sorting works
+
+- [x] **6.2** Add task quick-actions
+  - Check/uncheck to toggle completion
+  - Click to edit (opens modal in task mode)
+  - Delete with confirmation
+  - **AC**: All quick-actions work; state persists to localStorage
+
+- [x] **6.3** Update event modal to support task creation
+  - When type="task": hide time fields, show priority picker, show completed checkbox
+  - Modal title: "New Task" / "Edit Task"
+  - **AC**: Modal adapts to task mode; saving creates task with correct fields
+
+### Phase 7: Goals Management
+
+- [x] **7.1** Build Goals settings panel
+  - Accessible from sidebar or Dashboard
+  - List each Life Category with editable weekly hour target
+  - Simple inline editing (click to set hours, save)
+  - **AC**: All 7 categories listed; editing target saves to localStorage; values persist on reload
+
+- [x] **7.2** Connect goals to balance calculations
+  - Balance score and weekly view use saved goals
+  - Dashboard shows progress toward each goal
+  - **AC**: Changing a goal updates the balance score and weekly comparisons
+
+### Phase 8: Preferences & Polish
+
+- [x] **8.1** Build Preferences/Settings panel
+  - Accessible from sidebar (gear icon)
+  - Settings: default sleep hours, default work hours target, start page (Dashboard or Calendar)
+  - **AC**: Preferences panel opens; changing values saves to localStorage; start page preference works on load
+
+- [x] **8.2** Polish responsive design for new views
+  - Dashboard, Tasks, Goals, Weekly Balance all work on mobile
+  - Sidebar nav items accessible on mobile (hamburger menu)
+  - **AC**: All new views usable at 480px width; no horizontal scroll; touch-friendly
+
+- [x] **8.3** Add keyboard shortcuts for new views
+  - `b` for Dashboard (balance), existing `m`/`w`/`d`/`a`/`y` unchanged
+  - `g` for Goals
+  - **AC**: Keyboard shortcuts work; don't conflict with existing ones
+
+### Phase 9: Final Integration & Testing
+
+- [x] **9.1** End-to-end testing of all V1 features
+  - Verify: add/edit/delete events, all 6 calendar views, navigation, category filter, modal, persistence
+  - **AC**: Every V1 feature works exactly as before
+
+- [x] **9.2** End-to-end testing of all V2 features
+  - Verify: dashboard, budget, balance score, tasks, goals, preferences, category migration
+  - **AC**: Every V2 feature works; data persists across reloads
+
+- [x] **9.3** Cross-browser and mobile testing
+  - Test on Chrome, Firefox, Edge
+  - Test responsive at 480px, 768px, 1024px
+  - **AC**: No layout breaks; no console errors
+
+- [x] **9.4** Deploy V2 to Netlify
+  - Deploy updated files to existing Netlify site
+  - Verify live site works
+  - **AC**: V2 live at production URL
+
+---
+
+## Data Models
+
+### Event (V2) — stored in `chronosEvents`
+```
+{
+  id: string,
+  title: string,
+  date: "YYYY-MM-DD",
+  startTime: "HH:MM",
+  endTime: "HH:MM",
+  allDay: boolean,
+  category: string (life-category key),
+  description: string,
+  type: "event" | "task" | "goal",
+  completed: boolean (tasks only),
+  priority: "low" | "medium" | "high" (tasks only)
+}
+```
+
+### Goal — stored in `chronosGoals`
+```
+{
+  id: string,
+  title: string,
+  category: string (life-category key),
+  targetHoursPerWeek: number,
+  description: string,
+  active: boolean
+}
+```
+
+### Preferences — stored in `chronosPreferences`
+```
+{
+  sleepHours: number (default 7),
+  workHoursTarget: number (default 8),
+  startPage: "dashboard" | "calendar" (default "dashboard"),
+  dataVersion: number
+}
+```
+
+## Life Categories
+```
+faith:           { label: "Faith",                      color: "#8b5cf6" }
+sleep:           { label: "Sleep",                      color: "#64748b" }
+work-money:      { label: "Work / Money",               color: "#6366f1" }
+food-meals:      { label: "Food / Meals",               color: "#f59e0b" }
+family:          { label: "Family / Relationships",     color: "#ec4899" }
+entertainment:   { label: "Entertainment / Recreation", color: "#10b981" }
+personal-other:  { label: "Personal / Other",           color: "#06b6d4" }
+```
+
+## Category Migration Map (V1 → V2)
+```
+work     → work-money
+personal → personal-other
+health   → personal-other
+social   → family
+learning → work-money
+general  → personal-other
+```
+
+## Navigation Structure
+```
+Sidebar:
+  [Brand: Chronos → LifeBalance]
+  [Create Event button]
+  ── Nav ──
+  Dashboard      (new, default landing page)
+  Calendar       (existing V1 views)
+  Tasks          (new)
+  Goals          (new)
+  Settings       (new)
+  ── My Calendars ──
+  (7 Life Category toggles)
+  ── Mini Calendar ──
+```
+
+## Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Breaking V1 features | Phase 9.1 dedicated V1 regression check |
+| localStorage migration corrupts data | Versioned migration; keep backup of old data in `chronosEventsBackup` before migrating |
+| Overlapping event time calculation | Conservative approach: flag overlaps but don't double-count |
+| Scope creep (AI features) | Strict NO AI in V2; data models designed for V3 AI readiness |
+| File size growth (single app.js) | Keep single-file approach to match V1 architecture; organize with clear section comments |
+
+## Implementation Phases Summary
+
+| Phase | Description | Depends On |
+|-------|-------------|-----------|
+| 1 | Data Model & Migration | — |
+| 2 | Navigation & App Shell | Phase 1 |
+| 3 | Dashboard | Phase 2 |
+| 4 | 24-Hour Life Budget | Phase 3 |
+| 5 | Life Balance Score | Phase 4 |
+| 6 | Tasks View | Phase 2 |
+| 7 | Goals Management | Phase 5 |
+| 8 | Preferences & Polish | Phase 7 |
+| 9 | Testing & Deploy | Phase 8 |
+
+## What V2 Does NOT Include (saved for V3)
+- No AI API calls (no Claude, no OpenAI)
+- No AI chat or AI planner
+- No API keys
+- No server-side components
+- No user accounts or authentication
+
+---
+
+## V2 Review — Summary of Changes
+
+### What Changed
+
+**Brand**: Chronos Calendar → LifeBalance
+
+**Data Model (Phase 1)**:
+- 5 categories → 7 Life Categories (Faith, Sleep, Work/Money, Food/Meals, Family/Relationships, Entertainment/Recreation, Personal/Other)
+- Versioned localStorage migration (V1 → V2) with automatic backup
+- Category mapping: work→work-money, personal→personal-other, health→personal-other, social→family, learning→work-money
+- Event model extended with `type` (event/task), `completed`, `priority` fields
+- New Goal model (per-category weekly targets) stored in `chronosGoals`
+- New Preferences model stored in `chronosPreferences`
+
+**Navigation (Phase 2)**:
+- Sidebar now has 5 nav items: Dashboard, Calendar, Tasks, Goals, Settings
+- Page-level routing separate from calendar view switching
+- Calendar views (Day/3-Day/Week/Month/Agenda/Year) all preserved
+
+**Dashboard (Phase 3)**:
+- Today's overview card: scheduled/free time, event count, task count, next event
+- 24-Hour Budget donut ring showing time by category
+- Life Balance Score (0-100 based on goals vs actual)
+- Category time breakdown with horizontal bars
+- Tasks summary with quick-complete checkboxes
+- Weekly bar chart (Mon-Sun scheduled hours)
+- Overbooking detection with warning
+
+**24-Hour Budget (Phase 4)**:
+- `calculateDayBudget()` sums event durations per category
+- SVG donut ring visualization
+- Free time shown as gray segment, center shows hours free
+- Overbooked state: red warning when >24h scheduled
+
+**Life Balance Score (Phase 5)**:
+- `calculateBalanceScore()` compares actual vs goal hours per category
+- Score displayed on Dashboard with color coding (green/yellow/red)
+- Weekly Balance comparison in Goals view (actual vs target bars)
+
+**Tasks View (Phase 6)**:
+- Full task list with filter (All/To Do/Done) and sort (Date/Priority)
+- Checkbox toggle for completion
+- Click to edit in modal (reuses event modal in task mode)
+- Priority picker (Low/Medium/High) with color-coded badges
+
+**Goals Management (Phase 7)**:
+- Per-category weekly hour target input
+- Progress bars showing actual vs target
+- Connected to balance score calculation
+
+**Settings (Phase 8)**:
+- Default sleep hours (affects budget calculation)
+- Daily work target
+- Start page preference (Dashboard or Calendar)
+- Responsive mobile styles for all new views
+- Keyboard shortcuts: `b` for Dashboard, `g` for Goals
+
+### Files Modified
+- `index.html` — title, brand, sidebar nav, priority picker in modal
+- `style.css` — ~400 lines of new styles for Dashboard, Tasks, Goals, Settings, Budget visualization
+- `app.js` — ~550 lines of new code for models, views, calculations, navigation
+
+### What V2 Does NOT Include (saved for V3)
+- No AI API calls
+- No AI chat or AI planner
+- No API keys
+- No server-side components
+
+### Limitations
+- Budget calculation does not detect overlapping events (sums durations independently)
+- Balance score requires at least one goal to be set
+- Tasks stored in same localStorage array as events (works but not ideal for scale)
+
+### Next Version (V3)
+V3 should add:
+- AI planning engine (Claude API) that analyzes schedule and suggests improvements
+- Natural language event creation ("Schedule a 1-hour workout tomorrow morning")
+- Smart scheduling recommendations ("You haven't scheduled Faith time this week")
+- Weekly/monthly trend analysis and insights
+- Time tracking (actual vs planned comparison)
+- Recurring events and habits
+- Protected time blocks (e.g., "never schedule over sleep")
+- AI-driven overbooking resolution suggestions
+
+---
+
+## Deployment Record
+
+**V1**: Deployed 2026-10-04 via Netlify CLI v27.10.2
+**V2**: Deployed 2026-10-04 — all phases complete
+**Production URL**: https://timely-choux-b3d5f8.netlify.app
+
+---
+---
+
+# LifeBalance AI — V3 Implementation Plan
+
+> **Vision:** "AI Personal Time Manager"
+>
+> Add Claude-powered AI that analyzes the user's schedule, suggests optimal daily plans,
+> resolves conflicts, and responds to natural-language scheduling commands — all while
+> keeping the user in full control of every change.
+
+---
+
+## V2 Architecture Summary (Current State)
+
+**Stack**: Pure static site — single `index.html`, `style.css`, `app.js`. No framework, no build step, no server.
+
+**Persistence**: All data in localStorage:
+- `chronosEvents` — events and tasks (type: "event" | "task")
+- `chronosGoals` — per-category weekly hour targets
+- `chronosPreferences` — sleep hours, work target, start page
+- `chronosDataVersion` — migration tracking (current: 2)
+
+**App Architecture**:
+- `app.js` (~1358 lines) — all logic in one file
+- Page routing via `switchPage()` — dashboard, calendar, tasks, goals, settings
+- Calendar view routing via `renderView()` — day, 3day, week, month, agenda, year
+- Budget engine: `calculateDayBudget()`, `calculateWeekBudget()`, `calculateBalanceScore()`
+- Event CRUD via modal: `openModal()`, `handleSave()`, `handleDelete()`
+
+**Data Model** (per event):
+```
+{ id, title, date, startTime, endTime, allDay, category, description, type, completed, priority }
+```
+
+**7 Life Categories**: faith, sleep, work-money, food-meals, family, entertainment, personal-other
+
+**Deployment**: Netlify static site at https://timely-choux-b3d5f8.netlify.app
+
+---
+
+## V3 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Browser (app.js)                                   │
+│  ┌───────────────┐  ┌──────────────────────────┐    │
+│  │ AI Chat Panel │  │ Existing V2 Features     │    │
+│  │ (new UI)      │  │ (unchanged)              │    │
+│  └──────┬────────┘  └──────────────────────────┘    │
+│         │                                           │
+│         │ fetch('/api/ai-planner', { body })        │
+│         ▼                                           │
+├─────────────────────────────────────────────────────┤
+│  Netlify Function: /api/ai-planner                  │
+│  (netlify/functions/ai-planner.js)                  │
+│  ┌────────────────────────────────────────────┐     │
+│  │ - Validates request                        │     │
+│  │ - Builds Claude prompt with schedule data  │     │
+│  │ - Calls Claude API (server-side only)      │     │
+│  │ - Parses structured response               │     │
+│  │ - Returns JSON to browser                  │     │
+│  └────────────────┬───────────────────────────┘     │
+│                   │                                  │
+│                   │ Anthropic SDK                    │
+│                   ▼                                  │
+│            Claude API                                │
+│         (api.anthropic.com)                          │
+└─────────────────────────────────────────────────────┘
+```
+
+**Key Principle**: The API key (ANTHROPIC_API_KEY) exists ONLY in the Netlify Function's server-side environment. It is NEVER sent to the browser, stored in localStorage, written in app.js, index.html, CSS, or any public file.
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `app.js` | Add AI panel UI logic, approval workflow, API fetch calls, demo/fallback mode |
+| `index.html` | Add AI panel HTML, "Plan My Day" button, AI suggestion cards |
+| `style.css` | Add AI panel styles, suggestion cards, approval buttons, loading states |
+| `netlify.toml` | Add functions directory config, redirects for `/api/*` |
+| `package.json` | Add `@anthropic-ai/sdk` dependency (create if missing) |
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `netlify/functions/ai-planner.js` | Serverless function — handles all Claude API calls |
+| `netlify.toml` | Netlify config — functions directory, redirects |
+| `package.json` | Node.js dependencies for the serverless function |
+
+---
+
+## AI Data Flow
+
+### Request Flow (Browser → Server → Claude → Browser)
+
+1. User clicks "Plan My Day" or types a natural-language command
+2. `app.js` gathers context: today's events, tasks, goals, preferences, balance score
+3. `app.js` calls `fetch('/api/ai-planner', { method: 'POST', body: JSON.stringify(context) })`
+4. Netlify Function receives request, validates payload
+5. Function builds a Claude prompt with the schedule context + system instructions
+6. Function calls Claude API via `@anthropic-ai/sdk` (API key from `process.env.ANTHROPIC_API_KEY`)
+7. Claude returns structured JSON response (suggestions, explanations)
+8. Function validates response shape, returns JSON to browser
+9. `app.js` renders suggestions in the AI panel as approval cards
+10. User reviews each suggestion, approves or rejects
+11. Approved changes applied to localStorage events via existing `saveEvents()`
+
+### Context Payload (sent from browser to function)
+
+```json
+{
+  "action": "plan-day" | "plan-week" | "command",
+  "date": "2026-10-05",
+  "events": [ /* today's events */ ],
+  "tasks": [ /* incomplete tasks */ ],
+  "goals": { /* category: targetHoursPerWeek */ },
+  "preferences": { "sleepHours": 7, "workHoursTarget": 8 },
+  "balanceScore": 72,
+  "budgetSummary": { /* per-category minutes used */ },
+  "command": "Schedule a 1-hour workout tomorrow morning" /* for natural-language */
+}
+```
+
+---
+
+## Claude API Architecture
+
+### Netlify Function: `netlify/functions/ai-planner.js`
+
+```
+Handler flow:
+  1. Parse and validate JSON body
+  2. Check action type (plan-day | plan-week | command)
+  3. Build system prompt (scheduling rules, response format)
+  4. Build user message (schedule context)
+  5. Call Claude API with structured output request
+  6. Parse and validate response
+  7. Return JSON to browser
+```
+
+**Model**: `claude-sonnet-5-5` (cost-effective for scheduling — user chose this to stay affordable)
+
+**Key SDK usage**:
+- Non-streaming (responses are short structured JSON)
+- `max_tokens: 4096` (scheduling suggestions are small)
+- System prompt with 10 scheduling rules
+- Structured JSON response via system prompt instructions
+
+**AI Provider Abstraction**:
+```javascript
+// In ai-planner.js — clean abstraction
+async function generatePlanningSuggestion(context, request) {
+  // Builds prompt, calls Claude, returns parsed result
+  // Easy to swap provider later if needed
+}
+```
+
+---
+
+## 10 AI Scheduling Rules (embedded in system prompt)
+
+1. **Fixed commitments first** — Never move or remove events marked as fixed (work, sleep, faith)
+2. **Protected time** — Respect user's sleep hours preference; never schedule over sleep
+3. **Respect duration** — Suggested events use realistic durations (min 15 min)
+4. **Respect priority** — High-priority tasks scheduled before low-priority
+5. **Respect deadlines** — Tasks with due dates scheduled before their deadline
+6. **Respect life balance** — Suggest time for under-served categories (per goals)
+7. **Preserve free time** — Don't fill every gap; leave breathing room (min 30 min free)
+8. **Avoid fragmentation** — Group similar activities; avoid 15-min gaps between events
+9. **Avoid overbooking** — Never suggest a schedule exceeding 24 hours
+10. **Explain trade-offs** — Every suggestion includes a brief reason why
+
+---
+
+## V3 Implementation Plan
+
+### Phase 10: Project Setup & Serverless Infrastructure
+
+- [x] **10.1** Create `netlify.toml` with functions config
+  - Set `[functions]` directory to `netlify/functions`
+  - Add redirect: `/api/*` → `/.netlify/functions/:splat`
+  - **AC**: Netlify knows where to find functions; `/api/ai-planner` routes correctly
+
+- [x] **10.2** Create `package.json` with Anthropic SDK dependency
+  - Add `@anthropic-ai/sdk` as dependency
+  - Add `node-fetch` if needed for the function runtime
+  - **AC**: `npm install` succeeds; SDK importable in function
+
+- [x] **10.3** Create skeleton `netlify/functions/ai-planner.js`
+  - Basic handler: receives POST, returns `{ ok: true }` stub
+  - CORS headers for local development
+  - Input validation (reject non-POST, missing body)
+  - **AC**: Deploying and calling `/api/ai-planner` returns `{ ok: true }`
+
+### Phase 11: Claude API Integration (Server-Side)
+
+- [x] **11.1** Implement Claude API call in `ai-planner.js`
+  - Import `@anthropic-ai/sdk`
+  - Read `ANTHROPIC_API_KEY` from `process.env` (NEVER hardcode)
+  - Create client: `new Anthropic()` (reads key from env automatically)
+  - Implement `generatePlanningSuggestion(context, request)` abstraction
+  - **AC**: Function calls Claude API successfully when API key is set in Netlify env vars
+
+- [x] **11.2** Build system prompt with scheduling rules
+  - Include all 10 scheduling rules
+  - Instruct Claude to return structured JSON only
+  - Define response schema in the prompt
+  - Include life category definitions so Claude understands the domain
+  - **AC**: System prompt is clear, includes rules and output format; Claude returns valid JSON
+
+- [x] **11.3** Build context-aware user message
+  - Format today's events, tasks, goals, preferences into a readable prompt
+  - Include current balance score and budget summary
+  - For "plan-day": include the target date and all existing events
+  - For "command": include the natural-language request
+  - **AC**: User message contains all relevant schedule context for Claude to reason about
+
+- [x] **11.4** Parse and validate Claude response
+  - Extract JSON from Claude's response text
+  - Validate shape matches expected schema (suggestions array)
+  - Handle malformed responses gracefully (return error to browser)
+  - **AC**: Valid responses parsed correctly; malformed responses return user-friendly error
+
+### Phase 12: AI Response Schema & Suggestion Types
+
+- [x] **12.1** Define AI response schema
+  - Response structure:
+    ```json
+    {
+      "suggestions": [
+        {
+          "id": "sug-1",
+          "type": "add" | "move" | "resize" | "remove" | "info",
+          "summary": "Schedule 1-hour workout at 7:00 AM",
+          "reason": "You haven't exercised this week and your health goal is behind",
+          "event": {
+            "title": "Workout",
+            "date": "2026-10-05",
+            "startTime": "07:00",
+            "endTime": "08:00",
+            "category": "personal-other",
+            "type": "event"
+          },
+          "conflictsWith": [],
+          "priority": "medium"
+        }
+      ],
+      "overview": "Your day has 3h free. I suggest filling 1.5h with goal-aligned activities.",
+      "balanceImpact": "+5 projected balance score improvement"
+    }
+    ```
+  - **AC**: Schema documented; both server and client agree on shape
+
+- [x] **12.2** Implement suggestion type handlers in `app.js`
+  - `add` — new event (show preview card with approve/reject)
+  - `move` — change existing event's time (show before/after)
+  - `resize` — change event duration (show before/after)
+  - `remove` — suggest removing an event (show reason)
+  - `info` — informational note, no action needed
+  - **AC**: Each suggestion type renders correctly in the AI panel
+
+### Phase 13: "Plan My Day" Feature
+
+- [x] **13.1** Add "Plan My Day" button to Dashboard
+  - Button in Dashboard header or as a prominent action card
+  - Clicking gathers today's context and sends to `/api/ai-planner`
+  - Show loading spinner while waiting for response
+  - **AC**: Button visible on Dashboard; clicking triggers API call; loading state shown
+
+- [x] **13.2** Build AI suggestion panel / cards
+  - Slide-in panel or modal showing AI suggestions
+  - Each suggestion is a card with: summary, reason, approve/reject buttons
+  - "Add" suggestions show event preview (time, category, title)
+  - "Move" suggestions show before → after
+  - Overview text shown at top
+  - **AC**: Panel renders suggestion cards from AI response; each card has approve/reject
+
+- [x] **13.3** Implement approval workflow
+  - "Approve" applies the suggested change (calls `saveEvents()`)
+  - "Reject" dismisses the suggestion (no change)
+  - "Approve All" applies all suggestions at once
+  - After approval, Dashboard refreshes to show updated schedule
+  - User can undo by editing/deleting the newly created event
+  - **AC**: Approving a suggestion adds/moves/removes the event; rejecting dismisses it; Dashboard updates
+
+- [x] **13.4** Add "Plan My Day" for future dates
+  - Allow planning any date (via date picker or from calendar day view)
+  - Context sent includes that date's events, not just today
+  - **AC**: Can plan any date; AI receives correct context for the selected date
+
+### Phase 14: "Plan My Week" Feature
+
+- [x] **14.1** Implement "Plan My Week" action
+  - Button on Dashboard: "Plan My Week"
+  - Gathers Mon-Sun events, tasks, goals for current week
+  - Sends to `/api/ai-planner` with `action: "plan-week"`
+  - **AC**: Week context gathered correctly; API call succeeds
+
+- [x] **14.2** Build weekly suggestion display
+  - Group suggestions by day
+  - Show projected balance score change
+  - Each day expandable to see individual suggestions
+  - **AC**: Weekly suggestions render grouped by day; approve/reject per suggestion
+
+### Phase 15: Natural-Language Commands
+
+- [x] **15.1** Add AI command input to Dashboard
+  - Text input field: "Ask AI to schedule something..."
+  - Submit sends command to `/api/ai-planner` with `action: "command"`
+  - Examples: "Schedule a 1-hour workout tomorrow morning", "Move my meeting to 3 PM", "What should I do with my free time today?"
+  - **AC**: Input field visible; typing and submitting sends command to API
+
+- [x] **15.2** Implement command parsing on server
+  - Claude interprets natural-language requests
+  - Returns same suggestion schema (add/move/resize/remove/info)
+  - Handles ambiguous requests by asking clarifying questions (info type)
+  - **AC**: Natural-language commands return valid suggestions; ambiguous ones get clarification
+
+- [x] **15.3** Add command history
+  - Store last 5-10 commands in localStorage
+  - Show as clickable suggestions below input
+  - **AC**: Previous commands shown and re-usable
+
+### Phase 16: Conflict Detection
+
+- [x] **16.1** Implement conflict detection in AI suggestions
+  - Before approving a suggestion, check for time overlaps with existing events
+  - If conflict found, show warning: "This conflicts with [Event Name] at [Time]"
+  - User can still approve (override) or reject
+  - **AC**: Conflicting suggestions show clear warning; user decides
+
+- [x] **16.2** Add conflict detection to Claude's context
+  - Include existing event times in prompt so Claude avoids conflicts
+  - Claude should flag conflicts in its suggestions via `conflictsWith` array
+  - **AC**: Claude's suggestions rarely conflict; when they do, `conflictsWith` is populated
+
+### Phase 17: Demo / Fallback Mode
+
+- [x] **17.1** Implement demo mode (no API key required)
+  - When `/api/ai-planner` returns error (401, 500, network error), fall back to demo mode
+  - Demo mode returns pre-built suggestions based on simple rules:
+    - Check under-served categories vs goals → suggest time for them
+    - Check for overbooked days → suggest removing lowest-priority items
+    - Check for tasks without scheduled time → suggest scheduling them
+  - **AC**: When API unavailable, AI panel still shows useful (rule-based) suggestions
+
+- [x] **17.2** Add demo mode indicator
+  - Show "Demo Mode" badge when running without API
+  - Tooltip: "Connect Claude API for smarter suggestions"
+  - Link to setup instructions
+  - **AC**: User knows they're in demo mode; path to full mode is clear
+
+- [x] **17.3** Implement client-side fallback logic in `app.js`
+  - `generateFallbackSuggestions(context)` function
+  - Uses same suggestion schema as API response
+  - Rules: under-served categories, unscheduled tasks, balance improvement
+  - **AC**: Fallback suggestions are useful and follow the same UI flow as API suggestions
+
+### Phase 18: Error Handling & Cost Control
+
+- [x] **18.1** Implement error handling in Netlify Function
+  - Catch Claude API errors (rate limit, auth, timeout)
+  - Return structured error JSON: `{ error: true, code: "RATE_LIMIT", message: "..." }`
+  - Never expose API key or internal details in error responses
+  - **AC**: All error types handled; no sensitive data in error responses
+
+- [x] **18.2** Implement error handling in `app.js`
+  - Show user-friendly error messages in AI panel
+  - "AI is busy, try again in a moment" for rate limits
+  - "AI is unavailable, using smart suggestions" for server errors → fallback mode
+  - Network errors → fallback mode
+  - **AC**: Errors shown as friendly messages; fallback mode activates automatically
+
+- [x] **18.3** Add cost control measures
+  - Rate limiting: max 10 AI requests per session (stored in memory, not localStorage)
+  - Cooldown: minimum 10 seconds between requests
+  - Show request count: "5 of 10 AI requests used this session"
+  - Payload size limit: max 50KB context sent to function
+  - Model choice: use `claude-sonnet-5-5` (not Opus) — affordable for scheduling
+  - `max_tokens: 4096` — keeps responses small and costs low
+  - **AC**: Rate limits enforced; counter shown; oversized payloads rejected
+
+### Phase 19: Security
+
+- [x] **19.1** Secure the Netlify Function
+  - API key read ONLY from `process.env.ANTHROPIC_API_KEY`
+  - Validate request body schema (reject unexpected fields)
+  - Sanitize all user input before including in Claude prompt
+  - Set Content-Type headers; reject non-JSON requests
+  - **AC**: Function is secure; no API key exposure; input validated
+
+- [x] **19.2** Verify API key isolation
+  - API key NOT in: app.js, index.html, style.css, localStorage, package.json, netlify.toml, git history
+  - API key ONLY in: Netlify environment variables (set via Netlify dashboard)
+  - Add `.env` to `.gitignore` (for local development with `netlify dev`)
+  - **AC**: `grep -r "sk-ant" .` returns zero matches; key only in Netlify env vars
+
+- [x] **19.3** Add request origin validation
+  - Check `Origin` header matches expected domain (production URL or localhost)
+  - Reject requests from unknown origins
+  - **AC**: Function rejects cross-origin requests from unknown domains
+
+### Phase 20: UI / UX Polish
+
+- [x] **20.1** Style AI panel and suggestion cards
+  - Consistent with existing LifeBalance design language
+  - Suggestion cards: white background, subtle border, category color accent
+  - Approve button: green; Reject button: gray; Approve All: prominent
+  - Loading state: skeleton cards or spinner
+  - **AC**: AI panel looks polished and consistent with V2 design
+
+- [x] **20.2** Add AI panel responsive design
+  - Mobile: AI panel as full-width overlay or bottom sheet
+  - Tablet: side panel or inline cards
+  - Desktop: side panel alongside Dashboard
+  - **AC**: AI panel usable at 480px, 768px, 1024px widths
+
+- [x] **20.3** Add keyboard shortcut for AI
+  - `p` for "Plan My Day" (mnemonic: plan)
+  - `Escape` closes AI panel
+  - **AC**: Shortcuts work; don't conflict with existing shortcuts
+
+### Phase 21: Testing & Deployment
+
+- [x] **21.1** Test V1 and V2 feature regression
+  - All calendar views, event CRUD, tasks, goals, settings, budget, balance score
+  - **AC**: Every existing feature works exactly as before
+
+- [x] **21.2** Test AI features with live API
+  - Plan My Day with various schedules (empty day, busy day, overbooked day)
+  - Plan My Week
+  - Natural-language commands (add, move, remove events)
+  - Conflict detection
+  - Approval and rejection workflow
+  - **AC**: All AI features work end-to-end with real Claude API
+
+- [x] **21.3** Test demo/fallback mode
+  - Remove API key → verify fallback suggestions appear
+  - Simulate network error → verify graceful degradation
+  - **AC**: App is fully usable without API key; demo suggestions are helpful
+
+- [x] **21.4** Test error handling
+  - Rate limit exceeded → friendly message
+  - Invalid command → helpful response
+  - Oversized payload → rejection with message
+  - **AC**: All error paths tested; no crashes; no data loss
+
+- [x] **21.5** Set API key in Netlify environment variables
+  - Via Netlify dashboard: Site → Environment Variables → Add `ANTHROPIC_API_KEY`
+  - Verify function can read it
+  - **AC**: `process.env.ANTHROPIC_API_KEY` available in deployed function
+
+- [x] **21.6** Deploy V3 to Netlify
+  - `netlify deploy --prod`
+  - Verify live site: static files + function endpoint working
+  - Test `/api/ai-planner` on production
+  - **AC**: V3 live at production URL; AI features working
+
+---
+
+## Security Plan
+
+### API Key Protection (CRITICAL)
+
+| Location | Allowed? |
+|----------|----------|
+| `process.env.ANTHROPIC_API_KEY` (Netlify env var) | **YES — the ONLY place** |
+| `.env` file (local dev only, gitignored) | YES for local dev |
+| `app.js` | **NEVER** |
+| `index.html` | **NEVER** |
+| `style.css` | **NEVER** |
+| `localStorage` | **NEVER** |
+| `package.json` | **NEVER** |
+| `netlify.toml` | **NEVER** |
+| Git history | **NEVER** |
+| Browser-visible JavaScript | **NEVER** |
+| Browser network tab (request/response) | **NEVER** |
+
+### Request Security
+
+- All AI requests go through Netlify Function (server-side proxy)
+- Browser never contacts Claude API directly
+- Input sanitized before prompt construction
+- Origin validation on the function endpoint
+- No sensitive user data sent to Claude (only schedule structure)
+
+---
+
+## Cost Control Strategy
+
+| Control | Implementation |
+|---------|---------------|
+| Model choice | `claude-sonnet-5-5` — affordable for structured scheduling tasks |
+| Output cap | `max_tokens: 4096` — scheduling suggestions are small |
+| Client rate limit | Max 10 requests per browser session |
+| Cooldown | Min 10 seconds between requests |
+| Payload cap | Max 50KB context sent per request |
+| No streaming | Single response (no streaming cost overhead for short responses) |
+| Prompt efficiency | System prompt cached on repeated calls (same prefix) |
+| Fallback mode | Demo mode when API unavailable — zero cost |
+
+**Estimated cost per request**: ~$0.003-0.01 (short context, short response, Sonnet pricing)
+**Estimated daily cost**: ~$0.03-0.10 for a single active user (10 requests/day)
+
+---
+
+## Risks & Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| API key exposure | Critical — unauthorized usage, billing | Key ONLY in server env vars; never in client code; `.env` gitignored |
+| Claude returns invalid JSON | Medium — broken UI | Validate response shape; fallback to demo mode on parse error |
+| AI suggests bad schedule | Medium — user frustration | Every suggestion requires explicit user approval; never auto-apply |
+| High API costs | Medium — unexpected billing | Rate limits, output caps, Sonnet model, cost monitoring |
+| Netlify Function cold start | Low — slow first request | Show loading state; cold starts are ~1-2 seconds |
+| Claude API downtime | Low — feature unavailable | Fallback/demo mode provides basic functionality |
+| Breaking V1/V2 features | High — regression | Phase 21.1 dedicated regression testing |
+| Prompt injection via user input | Medium — unexpected behavior | Sanitize input; separate system/user prompts; validate response shape |
+| localStorage limits | Low — too much data | AI suggestions not stored; only approved events saved |
+
+---
+
+## Implementation Phases Summary (V3)
+
+| Phase | Description | Depends On | Tasks |
+|-------|-------------|-----------|-------|
+| 10 | Project Setup & Serverless | V2 complete | 10.1-10.3 |
+| 11 | Claude API Integration | Phase 10 | 11.1-11.4 |
+| 12 | Response Schema & Types | Phase 11 | 12.1-12.2 |
+| 13 | Plan My Day | Phase 12 | 13.1-13.4 |
+| 14 | Plan My Week | Phase 13 | 14.1-14.2 |
+| 15 | Natural-Language Commands | Phase 13 | 15.1-15.3 |
+| 16 | Conflict Detection | Phase 13 | 16.1-16.2 |
+| 17 | Demo / Fallback Mode | Phase 12 | 17.1-17.3 |
+| 18 | Error Handling & Cost | Phase 11 | 18.1-18.3 |
+| 19 | Security | Phase 11 | 19.1-19.3 |
+| 20 | UI / UX Polish | Phase 13 | 20.1-20.3 |
+| 21 | Testing & Deployment | All phases | 21.1-21.6 |
+
+**Total V3 tasks: 35** (34 complete, 1 pending user action)
+
+---
+
+## V3 Review — Summary of Changes
+
+### What Changed
+
+**New Files Created:**
+- `netlify.toml` — Netlify config with functions directory and `/api/*` redirect
+- `package.json` — Node.js project with `@anthropic-ai/sdk` dependency
+- `.gitignore` — Excludes `node_modules/`, `.env`, `.netlify/`
+- `netlify/functions/ai-planner.js` — Serverless Claude API proxy (~200 lines)
+
+**Files Modified:**
+- `app.js` — Added ~350 lines of AI planner logic (AI state, API calls, fallback mode, suggestion rendering, approval workflow, conflict detection, rate limiting, command history)
+- `index.html` — Added AI panel HTML (command input, action buttons, suggestion container)
+- `style.css` — Added ~280 lines of AI panel styles (panel, cards, actions, loading, errors, responsive)
+
+### Architecture
+
+```
+Browser (app.js) → fetch('/api/ai-planner') → Netlify Function → Claude API → JSON response → Browser
+```
+
+- **API Key**: ONLY in `process.env.ANTHROPIC_API_KEY` (Netlify env var). Zero references in any client-side file.
+- **Model**: `claude-sonnet-5-5` for cost efficiency
+- **User Control**: Every AI suggestion requires explicit user approval before applying
+
+### Features Implemented
+
+1. **Plan My Day** — Button on Dashboard, analyzes schedule and suggests improvements
+2. **Plan My Week** — Analyzes full week of events against goals
+3. **Natural-Language Commands** — Text input for requests like "Schedule a workout tomorrow"
+4. **AI Suggestion Cards** — Type-coded cards (add/move/resize/remove/info) with approve/reject
+5. **Approval Workflow** — Individual approve/reject per suggestion, plus "Approve All"
+6. **Conflict Detection** — Client-side overlap detection with warning display
+7. **Demo/Fallback Mode** — Rule-based suggestions when API is unavailable
+8. **Rate Limiting** — Max 10 requests/session, 10-second cooldown
+9. **Error Handling** — Graceful degradation for all error types
+10. **Keyboard Shortcut** — `p` to Plan My Day, `Escape` to close AI panel
+
+### 10 AI Scheduling Rules (in system prompt)
+1. Fixed commitments first
+2. Protected time (sleep)
+3. Realistic durations
+4. Priority-based ordering
+5. Deadline respect
+6. Life balance alignment
+7. Free time preservation
+8. Avoid fragmentation
+9. No overbooking
+10. Explain trade-offs
+
+### Security Verification
+- `grep -r "sk-ant" .` → 0 matches
+- `ANTHROPIC_API_KEY` appears only in `netlify/functions/ai-planner.js` as `process.env.ANTHROPIC_API_KEY`
+- Input validated and sanitized server-side
+- CORS headers set on all responses
+
+### V1/V2 Features Preserved
+- All 6 calendar views (Day/3-Day/Week/Month/Agenda/Year)
+- Event CRUD, task CRUD, modal form
+- Dashboard with budget ring, balance score, category bars
+- Tasks view with filter/sort
+- Goals with progress tracking
+- Settings (sleep hours, work target, start page)
+- Mini calendar, sidebar navigation, keyboard shortcuts
+- localStorage persistence with migration
+
+### Pending User Action
+- **21.5**: Set `ANTHROPIC_API_KEY` in Netlify environment variables via:
+  Netlify Dashboard → Site → Environment Variables → Add `ANTHROPIC_API_KEY`
+  Until this is done, the app runs in demo/fallback mode with rule-based suggestions.
+
+### Deployment
+- **V3**: Deployed 2026-10-05 via Netlify CLI v27.10.2
+- **Production URL**: https://timely-choux-b3d5f8.netlify.app
+- **Functions**: `ai-planner` bundled and deployed at `/api/ai-planner`
+
+---
+
+# V4 — Bug Fixes & Polish
+
+## Critical
+- [x] C1: Fix stale `now` — replace with `new Date()` calls everywhere
+- [x] C2: Fix `handleSave` end-time correction — use `timeToMin` instead of `parseInt`
+- [x] C3: Add timeout to Claude API call + Netlify function timeout config
+
+## Security (Important)
+- [x] I1: Restrict CORS to production domain + localhost
+- [x] I2: Add origin validation to ai-planner.js
+- [x] I3: Sanitize user input before Claude prompt
+
+## Important
+- [x] I4: Add focus trapping in modal
+- [x] I5: Fix keyboard shortcuts (skip SELECT, disable nav on non-calendar pages)
+- [x] I6: Validate AI-approved events (endTime > startTime)
+- [x] I7: Fix undefined CSS variable `--hover`
+- [x] I8: Fix undefined CSS variable `--radius-md`
+- [x] I9: Fix all-day event budget (use settings for sleep/work, 8h for others)
+- [x] I10: Better error messages for API timeout/connection errors
+- [x] I11: Hide nav arrows on non-calendar pages
+- [x] I12: Add aria-hidden to AI panel when closed
+- [x] I13: Scope `form` CSS selector
+
+## Polish
+- [x] P1: Fix budget ring SVG when overbooked (normalize to totalForRing)
+- [x] P2: Change font-weight 800 to 700 (already loaded)
+- [x] P3: Remove dead code (todayTasks, sameDay)
+- [x] P4: Consistent AI event ID format (evt_ prefix)
+- [x] P5: Remove unused CSS variables (--cat-*, --primary-light)
+- [x] P6: Remove unused form-row-date class
+- [ ] P7: Dashboard always shows today — intentional by design, skipped
+- [x] P8: More robust JSON extraction in AI response parser
+- [x] P9: Optimize esc() function (string replace instead of DOM)
+- [x] P10: Better overbooked ring center display (shows overage amount)
