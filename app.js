@@ -148,7 +148,7 @@ function loadEvents() {
   } catch { return []; }
 }
 function saveEvents() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events)); } catch {}
+  safeSave(STORAGE_KEY, state.events);
 }
 
 function loadGoals() {
@@ -158,7 +158,7 @@ function loadGoals() {
   } catch { return []; }
 }
 function saveGoals() {
-  try { localStorage.setItem(GOALS_KEY, JSON.stringify(state.goals)); } catch {}
+  safeSave(GOALS_KEY, state.goals);
 }
 
 function loadPreferences() {
@@ -169,7 +169,7 @@ function loadPreferences() {
   } catch { return { sleepHours: 7, workHoursTarget: 8, startPage: 'dashboard' }; }
 }
 function savePreferences() {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(state.preferences)); } catch {}
+  safeSave(PREFS_KEY, state.preferences);
 }
 
 // ── Categories ──
@@ -192,7 +192,7 @@ function loadCategories() {
 }
 
 function saveCategories() {
-  try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(state.categories)); } catch {}
+  safeSave(CATEGORIES_KEY, state.categories);
 }
 
 function rebuildCategories() {
@@ -1401,6 +1401,31 @@ function renderSettingsView() {
         </select>
       </div>
     </div>
+    <h3 class="settings-subtitle">Data Management</h3>
+    <div class="settings-list">
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Export Backup</span>
+          <span class="setting-desc">Download all your data as a JSON file</span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="exportBackup()">Export Backup</button>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Import Backup</span>
+          <span class="setting-desc">Restore data from a previously exported backup file</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('import-file-input').click()">Import Backup</button>
+        <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="if(this.files[0]) importBackup(this.files[0]); this.value='';">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Export Calendar (.ics)</span>
+          <span class="setting-desc">Download events in iCalendar format for Google Calendar / Outlook</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="exportICS()">Export .ics</button>
+      </div>
+    </div>
   `;
   viewEl.appendChild(wrap);
 }
@@ -2036,6 +2061,249 @@ function updateNowIndicator() {
   el.style.top = (mins / 60) * HOUR_H + 'px';
 }
 
+// ── Toast Notifications ──
+let toastQueue = [];
+const MAX_TOASTS = 3;
+const TOAST_DURATIONS = { info: 6000, success: 6000, warning: 10000, error: 10000 };
+
+function showToast(message, type = 'info', actionLabel, actionCallback) {
+  const container = $('toast-container');
+  if (!container) return;
+  const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.id = id;
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  const icons = { info: '\u2139\uFE0F', success: '\u2705', warning: '\u26A0\uFE0F', error: '\u274C' };
+  let html = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-msg">${esc(message)}</span>`;
+  if (actionLabel && actionCallback) {
+    html += `<button class="toast-action" data-toast-action="true">${esc(actionLabel)}</button>`;
+  }
+  html += `<button class="toast-close" aria-label="Dismiss">&times;</button>`;
+  toast.innerHTML = html;
+  const actionBtn = toast.querySelector('[data-toast-action]');
+  if (actionBtn) actionBtn.addEventListener('click', () => { actionCallback(); dismissToast(id); });
+  toast.querySelector('.toast-close').addEventListener('click', () => dismissToast(id));
+  toastQueue.push(id);
+  while (toastQueue.length > MAX_TOASTS) dismissToast(toastQueue[0]);
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-visible'));
+  const duration = TOAST_DURATIONS[type] || 6000;
+  setTimeout(() => dismissToast(id), duration);
+}
+
+function dismissToast(id) {
+  const toast = document.getElementById(id);
+  if (!toast) return;
+  toastQueue = toastQueue.filter(t => t !== id);
+  toast.classList.remove('toast-visible');
+  toast.classList.add('toast-hiding');
+  setTimeout(() => toast.remove(), 300);
+}
+
+// ── Storage Safety ──
+function safeSave(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+      showToast('Storage is full! Export a backup to avoid data loss.', 'error', 'Export Now', exportBackup);
+    }
+    return false;
+  }
+}
+
+function checkStorageUsage() {
+  try {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('chronos')) {
+        total += (localStorage.getItem(key) || '').length;
+      }
+    }
+    if (total > 4 * 1024 * 1024) {
+      showToast('Storage is nearly full (' + Math.round(total / 1024 / 1024 * 10) / 10 + 'MB). Export a backup soon.', 'warning', 'Export Now', exportBackup);
+    }
+  } catch {}
+}
+
+// ── Export / Import ──
+function gatherAllData() {
+  return {
+    version: 5,
+    exportedAt: new Date().toISOString(),
+    events: state.events,
+    goals: state.goals,
+    preferences: state.preferences,
+    categories: state.categories,
+    aiHistory: (() => { try { return JSON.parse(localStorage.getItem('chronosAIHistory') || '[]'); } catch { return []; } })(),
+  };
+}
+
+function exportBackup() {
+  const data = gatherAllData();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateSlug = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `lifebalance-backup-${dateSlug}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  state.preferences.lastBackupDate = new Date().toISOString().slice(0, 10);
+  savePreferences();
+  showToast('Backup exported successfully.', 'success');
+}
+
+function validateBackupFile(data) {
+  if (!data || typeof data !== 'object') return 'File is not valid JSON.';
+  if (!data.version) return 'Missing version field — not a LifeBalance backup.';
+  if (!Array.isArray(data.events)) return 'Missing or invalid events array.';
+  for (let i = 0; i < data.events.length; i++) {
+    const e = data.events[i];
+    if (!e.id || !e.title || !e.date) return `Event #${i + 1} is missing required fields (id, title, date).`;
+  }
+  return null;
+}
+
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let data;
+    try { data = JSON.parse(e.target.result); } catch { showToast('File is not valid JSON.', 'error'); return; }
+    const err = validateBackupFile(data);
+    if (err) { showToast(err, 'error'); return; }
+    showImportPreview(data);
+  };
+  reader.readAsText(file);
+}
+
+function showImportPreview(data) {
+  const events = data.events.filter(e => e.type !== 'task');
+  const tasks = data.events.filter(e => e.type === 'task');
+  const goals = data.goals ? data.goals.length : 0;
+  const cats = data.categories ? data.categories.length : 0;
+  const curEvents = state.events.filter(e => e.type !== 'task').length;
+  const curTasks = state.events.filter(e => e.type === 'task').length;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'import-preview-overlay';
+  overlay.innerHTML = `
+    <div class="import-preview-modal">
+      <h3>Import Backup</h3>
+      <div class="import-preview-body">
+        <p><strong>File contains:</strong></p>
+        <ul>
+          <li>${events.length} events</li>
+          <li>${tasks.length} tasks</li>
+          <li>${goals} goals</li>
+          <li>${cats} categories</li>
+          ${data.exportedAt ? `<li>Exported on ${data.exportedAt.slice(0, 10)}</li>` : ''}
+        </ul>
+        <p class="import-warning">This will <strong>replace all current data</strong> (${curEvents} events, ${curTasks} tasks). Consider exporting a backup first.</p>
+      </div>
+      <div class="import-preview-actions">
+        <button class="btn btn-ghost" id="import-cancel">Cancel</button>
+        <button class="btn btn-primary" id="import-confirm">Replace All</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('import-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('import-confirm').addEventListener('click', () => {
+    applyImport(data);
+    overlay.remove();
+  });
+}
+
+function applyImport(data) {
+  state.events = data.events;
+  saveEvents();
+  if (data.goals) { state.goals = data.goals; saveGoals(); }
+  if (data.preferences) {
+    state.preferences = { ...state.preferences, ...data.preferences };
+    savePreferences();
+  }
+  if (data.categories && Array.isArray(data.categories) && data.categories.length) {
+    state.categories = data.categories;
+    saveCategories();
+    rebuildCategories();
+    state.activeCategories = new Set(Object.keys(CATEGORIES));
+  }
+  if (data.aiHistory) {
+    try { localStorage.setItem('chronosAIHistory', JSON.stringify(data.aiHistory)); } catch {}
+  }
+  renderAll();
+  showToast('Backup imported successfully.', 'success');
+}
+
+function generateICS() {
+  const events = state.events.filter(e => e.type !== 'task');
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LifeBalance//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  events.forEach(e => {
+    ics += 'BEGIN:VEVENT\r\n';
+    ics += `UID:${e.id}@lifebalance\r\n`;
+    const d = e.date.replace(/-/g, '');
+    if (e.allDay) {
+      ics += `DTSTART;VALUE=DATE:${d}\r\n`;
+      const next = addDays(new Date(e.date), 1);
+      ics += `DTEND;VALUE=DATE:${dateStr(next).replace(/-/g, '')}\r\n`;
+    } else {
+      ics += `DTSTART:${d}T${(e.startTime || '09:00').replace(':', '')}00\r\n`;
+      ics += `DTEND:${d}T${(e.endTime || '10:00').replace(':', '')}00\r\n`;
+    }
+    ics += `SUMMARY:${icsEscape(e.title)}\r\n`;
+    if (e.description) ics += `DESCRIPTION:${icsEscape(e.description)}\r\n`;
+    const cat = catStyle(e.category);
+    ics += `CATEGORIES:${icsEscape(cat.label)}\r\n`;
+    ics += 'END:VEVENT\r\n';
+  });
+  ics += 'END:VCALENDAR\r\n';
+  return ics;
+}
+
+function icsEscape(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+function exportICS() {
+  const ics = generateICS();
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lifebalance-calendar.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Calendar exported as .ics file.', 'success');
+}
+
+// ── Backup Reminder ──
+let backupReminderShown = false;
+function checkBackupReminder() {
+  if (backupReminderShown) return;
+  const last = state.preferences.lastBackupDate;
+  if (!last) {
+    backupReminderShown = true;
+    showToast("You haven't backed up your data yet. Export a backup to keep it safe.", 'warning', 'Export Now', exportBackup);
+    return;
+  }
+  const lastDate = new Date(last);
+  const now = new Date();
+  const diffDays = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+  if (diffDays >= 7) {
+    backupReminderShown = true;
+    showToast(`It's been ${diffDays} days since your last backup. Export one now?`, 'warning', 'Export Now', exportBackup);
+  }
+}
+
 // ── Escape HTML ──
 function esc(s) {
   if (!s) return '';
@@ -2143,3 +2411,20 @@ document.querySelectorAll('.view-switcher button').forEach(b => b.classList.togg
 renderCalList();
 switchPage(state.currentPage);
 setInterval(updateNowIndicator, 60000);
+checkStorageUsage();
+setTimeout(checkBackupReminder, 2000);
+
+// ── Test Exports ──
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    pad, fmtDate, dateStr, timeToMin, getMonday, addDays, daysInMonth, formatHour,
+    formatMinutes, formatTime12,
+    seedDefaultCategories, generateColorVariants, toKebabCase, uniqueCategoryId,
+    calculateDayBudget, calculateWeekBudget, calculateBalanceScore,
+    gatherAllData, validateBackupFile, generateICS, icsEscape,
+    categoryExists, rebuildCategories, getAllCategories,
+    getActiveCategories: () => CATEGORIES,
+    CATEGORY_MIGRATION, DEFAULT_CATEGORIES,
+    state,
+  };
+}

@@ -1410,3 +1410,202 @@ in the budget engine, not categories — they don't need entries.
 | AI planner confused by custom categories | Send full category list in payload; system prompt built dynamically |
 | Too many categories clutters UI | Max 15 active limit; archived section collapsed by default |
 | Color variants don't look good | Provide preset palette; custom colors use the same RGBA formula as defaults |
+
+---
+
+# V5 — Data Safety & Reliability
+
+> **Goal:** Make user data safe with export/import, add automated tests for core logic,
+> and add safety nets for localStorage limits and backup reminders.
+
+---
+
+## Current State
+
+**localStorage keys**: `chronosEvents`, `chronosGoals`, `chronosPreferences`,
+`chronosDataVersion`, `chronosCategories`, `chronosAIHistory`, `chronosView`
+
+**No tests exist.** No test runner, no `npm test`.
+
+**No export/import.** If localStorage is cleared, all data is lost.
+
+**No storage warnings.** `try/catch {}` on `setItem` silently swallows quota errors.
+
+---
+
+## Phase 28: Export / Import (JSON Backup)
+
+- [x] **28.1** Add "Export Backup" to Settings
+  - New section "Data Management" in `renderSettingsView()`
+  - Button "Export Backup" → gathers all localStorage data into a single object:
+    `{ version: 5, exportedAt: ISO, events, goals, preferences, categories, aiHistory }`
+  - Downloads as `lifebalance-backup-YYYY-MM-DD.json` via Blob + `<a>` download trick
+  - **AC**: Clicking "Export Backup" downloads a valid JSON file containing all user data
+
+- [x] **28.2** Add "Import Backup" to Settings
+  - "Import Backup" button → opens a file picker (`<input type="file" accept=".json">`)
+  - Reads the file, validates:
+    - Is valid JSON
+    - Has a `version` field
+    - Has at least `events` array
+    - Events have required fields (id, title, date)
+  - On validation failure: show inline error message, don't touch data
+  - **AC**: Selecting an invalid file shows a clear error; no data changed
+
+- [x] **28.3** Import preview & confirmation
+  - After validation, show a preview summary:
+    - "X events, Y tasks, Z goals, W categories"
+    - Compare with current data: "You currently have A events — this will replace them"
+  - Two options: "Replace All" (overwrites everything) and "Cancel"
+  - On "Replace All": write all keys to localStorage, reload app state, refresh UI
+  - **AC**: Preview shows accurate counts; replacing data works; UI reflects new data
+
+- [x] **28.4** Export as .ics (iCalendar)
+  - "Export Calendar (.ics)" button in Settings data section
+  - Generates RFC 5545 compliant iCalendar output:
+    - VCALENDAR wrapper with PRODID, VERSION
+    - Each event → VEVENT with DTSTART, DTEND, SUMMARY, DESCRIPTION, CATEGORIES
+    - All-day events use DATE format (no time); timed events use DATETIME
+    - Tasks skipped (they're not calendar events)
+  - Downloads as `lifebalance-calendar.ics`
+  - **AC**: Downloaded .ics file imports successfully in Google Calendar and Outlook
+
+## Phase 29: Automated Tests
+
+- [x] **29.1** Set up Vitest
+  - `npm install --save-dev vitest`
+  - Add `"test": "vitest run"` to package.json scripts
+  - Create `tests/` directory
+  - Configure vitest to handle the non-module app.js:
+    - Extract testable pure functions into a small helper or use inline `eval` approach
+    - Alternatively, add `export` wrappers behind a `typeof module` guard at the end of app.js
+  - **AC**: `npm test` runs and reports results (even if zero tests yet)
+
+- [x] **29.2** Test date/time utilities
+  - File: `tests/dateUtils.test.js`
+  - Test: `pad()`, `fmtDate()`, `dateStr()`, `todayStr()`, `timeToMin()`,
+    `getMonday()`, `addDays()`, `daysInMonth()`, `formatHour()`
+  - Edge cases: midnight, DST boundaries, month boundaries, leap year
+  - **AC**: All date utility tests pass
+
+- [x] **29.3** Test category CRUD
+  - File: `tests/categories.test.js`
+  - Test: `seedDefaultCategories()` returns 7 entries with correct shape
+  - Test: `rebuildCategories()` builds correct lookup from state.categories
+  - Test: `generateColorVariants()` produces valid rgba/hex
+  - Test: `categoryExists()` for active, archived, and unknown categories
+  - **AC**: All category tests pass
+
+- [x] **29.4** Test archive / restore
+  - Test: archiving a category sets status and archivedAt
+  - Test: archived category excluded from `getCategories()` but included in `getAllCategories()`
+  - Test: restoring resets status to active, archivedAt to null
+  - Test: cannot archive system category (sleep)
+  - Test: cannot archive the last active category
+  - **AC**: Archive/restore logic tests pass
+
+- [x] **29.5** Test data migration
+  - Test: V1→V2 category migration (CATEGORY_MIGRATION map)
+  - Test: V2→V3 seeds chronosCategories from defaults
+  - Test: migration is idempotent (running on already-migrated data is a no-op)
+  - Test: unknown categories fall back to personal-other
+  - **AC**: Migration tests pass
+
+- [x] **29.6** Test export / import round-trip
+  - Test: export produces valid JSON with all required keys
+  - Test: exported data can be re-imported and matches original
+  - Test: import validation rejects invalid files (missing fields, non-JSON, etc.)
+  - Test: .ics export produces valid iCalendar with correct VEVENT entries
+  - **AC**: Round-trip tests pass; validation catches bad input
+
+- [x] **29.7** Test budget calculation
+  - Test: `calculateDayBudget()` with 0 events → 1440 free minutes
+  - Test: with one 2-hour event → correct category total, 1320 free
+  - Test: all-day sleep event uses preference sleepHours
+  - Test: overbooking detection (>1440 minutes)
+  - **AC**: Budget calculation tests pass
+
+## Phase 30: Safety Net
+
+- [x] **30.1** localStorage quota detection
+  - After every `saveEvents()` / `saveGoals()` / `saveCategories()` / `savePreferences()`:
+    - Wrap `setItem` in try/catch; on `QuotaExceededError`, show a warning toast
+    - Toast: "Storage is full! Export a backup to avoid data loss."
+    - Add a small `showToast(message, type)` utility (success/warning/error)
+  - On app load: estimate usage with `JSON.stringify()` of all keys, warn if >4MB (of ~5MB typical limit)
+  - **AC**: When localStorage is nearly full, user sees a clear warning
+
+- [x] **30.2** Backup reminder (every 7 days)
+  - Store `lastBackupDate` in `chronosPreferences`
+  - On app load: if `lastBackupDate` is >7 days ago (or missing), show a reminder toast:
+    "It's been 7+ days since your last backup. Export one now?"
+  - Toast has a "Export Now" link that triggers the export flow
+  - After a successful export, update `lastBackupDate` to today
+  - Don't nag on every load — show once per session (use a JS flag, not localStorage)
+  - **AC**: After 7 days without export, user sees a one-time reminder; exporting resets the timer
+
+- [x] **30.3** Toast notification component
+  - `showToast(message, type, actionLabel, actionCallback)`
+  - Types: `info`, `warning`, `error`, `success`
+  - Auto-dismiss after 6 seconds (warning/error stay longer: 10s)
+  - Stackable (up to 3 visible at once)
+  - Positioned bottom-right, above any AI panel
+  - Accessible: `role="status"` with `aria-live="polite"`
+  - Styled consistent with app design language
+  - **AC**: Toasts render correctly; auto-dismiss; action button works; accessible
+
+## Phase 31: Testing & Deployment
+
+- [x] **31.1** Run all tests
+  - `npm test` passes with 0 failures
+  - **AC**: All tests green
+
+- [ ] **31.2** Manual regression test
+  - All calendar views, event/task CRUD, goals, settings, AI planner, category management
+  - Export and import a backup file
+  - Export .ics and import in another calendar app
+  - Trigger storage warning (if testable)
+  - Verify backup reminder appears (set lastBackupDate to 8 days ago in console)
+  - **AC**: All features work; no regressions
+
+- [ ] **31.3** Commit, tag, deploy
+  - Commit all changes
+  - Tag `v5.0`
+  - `netlify deploy --prod`
+  - **AC**: V5 live at production URL
+
+---
+
+## Files That Will Change
+
+| File | Changes |
+|------|---------|
+| `app.js` | Export/import functions, .ics generator, toast system, storage warning, backup reminder, export testable functions |
+| `index.html` | Toast container div |
+| `style.css` | Toast styles, data management section styles |
+| `package.json` | Add vitest dev dependency, add `test` script |
+| `tests/dateUtils.test.js` | Date utility tests |
+| `tests/categories.test.js` | Category CRUD tests |
+| `tests/migration.test.js` | Data migration tests |
+| `tests/exportImport.test.js` | Export/import round-trip tests |
+| `tests/budget.test.js` | Budget calculation tests |
+| `tests/setup.js` | Test setup (localStorage mock, function extraction) |
+
+## What V5 Does NOT Include
+
+- No cloud sync or user accounts
+- No merge strategy for import (replace only — merge is complex and error-prone)
+- No recurring export schedule (just a reminder)
+- No .ics import (only export — import requires full iCal parsing which is a big library)
+- No end-to-end / browser tests (unit tests only via Vitest)
+
+## Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Exporting functions from app.js breaks the browser | Use `typeof module` guard so exports only activate in Node/test context |
+| .ics format rejected by Google/Outlook | Follow RFC 5545 strictly; test with both apps |
+| Import overwrites data without undo | Show preview + confirmation; exported backup serves as undo |
+| Toast system clutters UI | Max 3 visible; auto-dismiss; positioned out of the way |
+| Vitest adds too much to dependencies | Dev dependency only; not shipped to production |
+| Storage quota varies by browser | Warn at 4MB (conservative); actual limit is typically 5-10MB |
