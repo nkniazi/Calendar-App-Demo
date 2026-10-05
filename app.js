@@ -1,5 +1,9 @@
 // ── Constants ──
 const STORAGE_KEY = 'chronosEvents';
+const GOALS_KEY = 'chronosGoals';
+const PREFS_KEY = 'chronosPreferences';
+const DATA_VERSION_KEY = 'chronosDataVersion';
+const CURRENT_DATA_VERSION = 2;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -8,24 +12,40 @@ const HOUR_H = 60;
 const MAX_MONTH_EVENTS = 3;
 
 const CATEGORIES = {
-  work:     { label: 'Work',     color: '#6366f1', light: 'rgba(99,102,241,0.13)',  dark: '#4338ca' },
-  personal: { label: 'Personal', color: '#8b5cf6', light: 'rgba(139,92,246,0.13)',  dark: '#6d28d9' },
-  health:   { label: 'Health',   color: '#10b981', light: 'rgba(16,185,129,0.13)',   dark: '#047857' },
-  social:   { label: 'Social',   color: '#f59e0b', light: 'rgba(245,158,11,0.13)',  dark: '#b45309' },
-  learning: { label: 'Learning', color: '#06b6d4', light: 'rgba(6,182,212,0.13)',   dark: '#0e7490' },
+  'faith':          { label: 'Faith',                      color: '#8b5cf6', light: 'rgba(139,92,246,0.13)',  dark: '#6d28d9' },
+  'sleep':          { label: 'Sleep',                      color: '#64748b', light: 'rgba(100,116,139,0.13)', dark: '#475569' },
+  'work-money':     { label: 'Work / Money',               color: '#6366f1', light: 'rgba(99,102,241,0.13)',  dark: '#4338ca' },
+  'food-meals':     { label: 'Food / Meals',               color: '#f59e0b', light: 'rgba(245,158,11,0.13)',  dark: '#b45309' },
+  'family':         { label: 'Family / Relationships',     color: '#ec4899', light: 'rgba(236,72,153,0.13)',  dark: '#be185d' },
+  'entertainment':  { label: 'Entertainment / Recreation', color: '#10b981', light: 'rgba(16,185,129,0.13)',  dark: '#047857' },
+  'personal-other': { label: 'Personal / Other',           color: '#06b6d4', light: 'rgba(6,182,212,0.13)',   dark: '#0e7490' },
+};
+
+const CATEGORY_MIGRATION = {
+  work: 'work-money',
+  personal: 'personal-other',
+  health: 'personal-other',
+  social: 'family',
+  learning: 'work-money',
+  general: 'personal-other',
 };
 
 // ── State ──
-const now = new Date();
 const state = {
-  currentDate: new Date(now),
+  currentDate: new Date(),
+  currentPage: 'dashboard',
   currentView: localStorage.getItem('chronosView') || 'week',
   events: [],
+  goals: [],
+  preferences: { sleepHours: 7, workHoursTarget: 8, startPage: 'dashboard' },
   editingEventId: null,
+  editingType: 'event',
   activeCategories: new Set(Object.keys(CATEGORIES)),
   sidebarOpen: false,
-  miniCalDate: new Date(now.getFullYear(), now.getMonth(), 1),
-  selectedCategory: 'work',
+  miniCalDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  selectedCategory: 'personal-other',
+  taskFilter: 'incomplete',
+  taskSort: 'date',
 };
 
 // ── DOM ──
@@ -57,10 +77,8 @@ const catPicker    = $('category-picker');
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtDate(y, m, d) { return `${y}-${pad(m + 1)}-${pad(d)}`; }
 function dateStr(d) { return fmtDate(d.getFullYear(), d.getMonth(), d.getDate()); }
-function todayStr() { return dateStr(now); }
+function todayStr() { return dateStr(new Date()); }
 function timeToMin(t) { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
-function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
-
 function getMonday(d) {
   const r = new Date(d);
   const day = r.getDay();
@@ -86,14 +104,15 @@ function formatTime12(t) {
   return m === 0 ? `${hr} ${p}` : `${hr}:${pad(m)} ${p}`;
 }
 
-function catStyle(cat) { return CATEGORIES[cat] || CATEGORIES.work; }
+function catStyle(cat) { return CATEGORIES[cat] || CATEGORIES['personal-other']; }
 
 // ── Storage ──
 function loadEvents() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw).map(e => {
+    const version = parseInt(localStorage.getItem(DATA_VERSION_KEY)) || 1;
+    const events = JSON.parse(raw).map(e => {
       if (e.time && !e.startTime) {
         e.startTime = e.time;
         const [h] = e.time.split(':').map(Number);
@@ -103,13 +122,108 @@ function loadEvents() {
       if (!e.startTime) { e.startTime = '09:00'; e.endTime = '10:00'; }
       if (!e.endTime) { const [h] = e.startTime.split(':').map(Number); e.endTime = `${pad(Math.min(h+1,23))}:00`; }
       if (e.allDay === undefined) e.allDay = false;
-      if (!e.category || !CATEGORIES[e.category]) e.category = 'work';
+      if (!e.type) e.type = 'event';
+      if (e.type === 'task' && e.completed === undefined) e.completed = false;
+      if (version < 2 && e.category && CATEGORY_MIGRATION[e.category]) {
+        e.category = CATEGORY_MIGRATION[e.category];
+      }
+      if (!e.category || !CATEGORIES[e.category]) e.category = 'personal-other';
       return e;
     });
+    if (version < CURRENT_DATA_VERSION) {
+      localStorage.setItem(DATA_VERSION_KEY, String(CURRENT_DATA_VERSION));
+      localStorage.setItem(STORAGE_KEY + '_v1_backup', raw);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    }
+    return events;
   } catch { return []; }
 }
 function saveEvents() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events)); } catch {}
+}
+
+function loadGoals() {
+  try {
+    const raw = localStorage.getItem(GOALS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveGoals() {
+  try { localStorage.setItem(GOALS_KEY, JSON.stringify(state.goals)); } catch {}
+}
+
+function loadPreferences() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    const defaults = { sleepHours: 7, workHoursTarget: 8, startPage: 'dashboard' };
+    return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+  } catch { return { sleepHours: 7, workHoursTarget: 8, startPage: 'dashboard' }; }
+}
+function savePreferences() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(state.preferences)); } catch {}
+}
+
+// ── Budget & Balance Calculations ──
+function calculateDayBudget(ds) {
+  const dayEvents = state.events.filter(e => e.date === ds && e.type !== 'task');
+  const totals = {};
+  for (const key of Object.keys(CATEGORIES)) totals[key] = 0;
+  let scheduledMin = 0;
+  dayEvents.forEach(e => {
+    let dur;
+    if (e.allDay) {
+      if (e.category === 'sleep') dur = (state.preferences.sleepHours || 7) * 60;
+      else if (e.category === 'work-money') dur = (state.preferences.workHoursTarget || 8) * 60;
+      else dur = 480;
+    } else {
+      dur = Math.max(0, timeToMin(e.endTime) - timeToMin(e.startTime));
+    }
+    totals[e.category] = (totals[e.category] || 0) + dur;
+    scheduledMin += dur;
+  });
+  return { categoryTotals: totals, scheduledMinutes: scheduledMin, freeMinutes: Math.max(0, 1440 - scheduledMin), overbooked: scheduledMin > 1440 };
+}
+
+function calculateWeekBudget(weekStartDate) {
+  const result = {};
+  for (const key of Object.keys(CATEGORIES)) result[key] = 0;
+  let totalScheduled = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStartDate, i);
+    const budget = calculateDayBudget(dateStr(d));
+    for (const key of Object.keys(budget.categoryTotals)) {
+      result[key] = (result[key] || 0) + budget.categoryTotals[key];
+    }
+    totalScheduled += budget.scheduledMinutes;
+  }
+  return { categoryTotals: result, totalScheduledMinutes: totalScheduled };
+}
+
+function calculateBalanceScore(weekStartDate) {
+  if (!state.goals.length) return null;
+  const weekBudget = calculateWeekBudget(weekStartDate);
+  let totalScore = 0, count = 0;
+  state.goals.filter(g => g.active).forEach(g => {
+    const actualMin = weekBudget.categoryTotals[g.category] || 0;
+    const targetMin = g.targetHoursPerWeek * 60;
+    if (targetMin > 0) {
+      totalScore += Math.min(1, actualMin / targetMin) * 100;
+      count++;
+    }
+  });
+  return count > 0 ? Math.round(totalScore / count) : null;
+}
+
+function formatMinutes(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function getTasksForDate(ds) {
+  return state.events.filter(e => e.type === 'task' && e.date === ds);
 }
 
 function eventsForDate(ds) {
@@ -236,6 +350,10 @@ function renderCalList() {
 // ── Date Heading ──
 function updateHeading() {
   const d = state.currentDate;
+  if (state.currentPage === 'dashboard') { headingEl.textContent = 'Dashboard'; return; }
+  if (state.currentPage === 'tasks') { headingEl.textContent = 'Tasks'; return; }
+  if (state.currentPage === 'goals') { headingEl.textContent = 'Goals'; return; }
+  if (state.currentPage === 'settings') { headingEl.textContent = 'Settings'; return; }
   switch (state.currentView) {
     case 'day':
       headingEl.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -264,16 +382,51 @@ function updateHeading() {
   }
 }
 
+// ── Page Router ──
+function switchPage(page) {
+  state.currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(n => {
+    const isActive = n.dataset.page === page;
+    n.classList.toggle('active', isActive);
+  });
+  const toolbar = document.querySelector('.toolbar');
+  const viewSwitcher = document.getElementById('view-switcher');
+  const navArrows = document.querySelector('.nav-arrows');
+  const todayBtn = document.getElementById('today-btn');
+  if (page === 'calendar') {
+    toolbar.style.display = '';
+    viewSwitcher.style.display = '';
+    navArrows.style.display = '';
+    todayBtn.style.display = '';
+  } else {
+    toolbar.style.display = page === 'dashboard' ? 'none' : '';
+    viewSwitcher.style.display = 'none';
+    navArrows.style.display = 'none';
+    todayBtn.style.display = 'none';
+  }
+  renderView();
+  renderMiniCal();
+}
+
 // ── View Router ──
 function renderView() {
   viewEl.innerHTML = '';
-  switch (state.currentView) {
-    case 'day': renderTimeView(1); break;
-    case '3day': renderTimeView(3); break;
-    case 'week': renderTimeView(7); break;
-    case 'month': renderMonthView(); break;
-    case 'agenda': renderAgendaView(); break;
-    case 'year': renderYearView(); break;
+  switch (state.currentPage) {
+    case 'dashboard': renderDashboard(); break;
+    case 'tasks': renderTasksView(); break;
+    case 'goals': renderGoalsView(); break;
+    case 'settings': renderSettingsView(); break;
+    case 'calendar':
+    default:
+      switch (state.currentView) {
+        case 'day': renderTimeView(1); break;
+        case '3day': renderTimeView(3); break;
+        case 'week': renderTimeView(7); break;
+        case 'month': renderMonthView(); break;
+        case 'agenda': renderAgendaView(); break;
+        case 'year': renderYearView(); break;
+      }
+      break;
   }
 }
 
@@ -525,7 +678,7 @@ function renderAgendaView() {
     const section = document.createElement('div');
     section.className = 'agenda-day';
     const isToday = ds === todayS;
-    const label = isToday ? 'Today' : ds === dateStr(addDays(now, 1)) ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const label = isToday ? 'Today' : ds === dateStr(addDays(new Date(), 1)) ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
     const dateEl = document.createElement('div');
     dateEl.className = 'agenda-date' + (isToday ? ' today-label' : '');
     dateEl.textContent = label;
@@ -566,7 +719,8 @@ function renderYearView() {
 
   for (let m = 0; m < 12; m++) {
     const card = document.createElement('div');
-    card.className = 'yv-month' + (m === now.getMonth() && year === now.getFullYear() ? ' current' : '');
+    const today = new Date();
+    card.className = 'yv-month' + (m === today.getMonth() && year === today.getFullYear() ? ' current' : '');
     card.innerHTML = `<div class="yv-month-name">${MONTHS[m]}</div>`;
     const grid = document.createElement('div');
     grid.className = 'yv-grid';
@@ -603,11 +757,385 @@ function renderYearView() {
   viewEl.appendChild(wrap);
 }
 
+// ── Dashboard View ──
+function renderDashboard() {
+  const todayS = todayStr();
+  const budget = calculateDayBudget(todayS);
+  const todayEvents = eventsForDate(todayS);
+  const incompleteTasks = state.events.filter(e => e.type === 'task' && !e.completed);
+  const nowDate = new Date();
+  const hour = nowDate.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const nextEvent = todayEvents.filter(e => !e.allDay && e.type !== 'task' && timeToMin(e.startTime) > nowDate.getHours() * 60 + nowDate.getMinutes())[0];
+
+  const weekStart = getMonday(state.currentDate);
+  const balanceScore = calculateBalanceScore(weekStart);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'dashboard-view';
+
+  // Header
+  wrap.innerHTML = `
+    <div class="dash-header">
+      <div>
+        <h1 class="dash-greeting">${greeting}</h1>
+        <p class="dash-date">${nowDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+      </div>
+      <button class="dash-ai-btn" onclick="handlePlanDay()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+        Plan My Day
+      </button>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card dash-summary">
+        <h3 class="dash-card-title">Today's Overview</h3>
+        <div class="dash-stats">
+          <div class="dash-stat">
+            <span class="dash-stat-value">${formatMinutes(budget.scheduledMinutes)}</span>
+            <span class="dash-stat-label">Scheduled</span>
+          </div>
+          <div class="dash-stat">
+            <span class="dash-stat-value">${formatMinutes(budget.freeMinutes)}</span>
+            <span class="dash-stat-label">Free</span>
+          </div>
+          <div class="dash-stat">
+            <span class="dash-stat-value">${todayEvents.filter(e => e.type !== 'task').length}</span>
+            <span class="dash-stat-label">Events</span>
+          </div>
+          <div class="dash-stat">
+            <span class="dash-stat-value">${incompleteTasks.length}</span>
+            <span class="dash-stat-label">Tasks</span>
+          </div>
+        </div>
+        ${budget.overbooked ? '<div class="dash-overbooked">⚠ Overbooked! Scheduled time exceeds 24 hours.</div>' : ''}
+        ${nextEvent ? `<div class="dash-next">Next: <strong>${esc(nextEvent.title)}</strong> at ${formatTime12(nextEvent.startTime)}</div>` : '<div class="dash-next dash-next-free">No more events today</div>'}
+      </div>
+
+      <div class="dash-card dash-budget">
+        <h3 class="dash-card-title">24-Hour Budget</h3>
+        <div class="dash-budget-ring" id="budget-ring"></div>
+      </div>
+
+      ${balanceScore !== null ? `
+      <div class="dash-card dash-balance">
+        <h3 class="dash-card-title">Life Balance Score</h3>
+        <div class="dash-score ${balanceScore >= 75 ? 'score-good' : balanceScore >= 50 ? 'score-ok' : 'score-low'}">
+          <span class="dash-score-num">${balanceScore}</span>
+          <span class="dash-score-max">/ 100</span>
+        </div>
+        <p class="dash-score-msg">${balanceScore >= 75 ? 'Great balance!' : balanceScore >= 50 ? 'Some areas need attention' : 'Review your schedule'}</p>
+        <button class="btn btn-ghost btn-sm" onclick="switchPage('goals')">View Goals</button>
+      </div>` : `
+      <div class="dash-card dash-balance">
+        <h3 class="dash-card-title">Life Balance Score</h3>
+        <p class="dash-score-msg" style="margin:16px 0">Set weekly goals to see your balance score</p>
+        <button class="btn btn-ghost btn-sm" onclick="switchPage('goals')">Set Goals</button>
+      </div>`}
+
+      <div class="dash-card dash-categories">
+        <h3 class="dash-card-title">Time by Category</h3>
+        <div class="dash-cat-bars">
+          ${Object.entries(CATEGORIES).map(([key, cat]) => {
+            const min = budget.categoryTotals[key] || 0;
+            const pct = Math.min(100, (min / 1440) * 100);
+            return `<div class="dash-cat-row">
+              <span class="dash-cat-dot" style="background:${cat.color}"></span>
+              <span class="dash-cat-label">${cat.label}</span>
+              <div class="dash-cat-bar-track"><div class="dash-cat-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+              <span class="dash-cat-time">${min > 0 ? formatMinutes(min) : '—'}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="dash-card dash-tasks-card">
+        <h3 class="dash-card-title">Tasks <span class="dash-tasks-count">${incompleteTasks.length} pending</span></h3>
+        <div class="dash-tasks-list">
+          ${incompleteTasks.slice(0, 5).map(t => `
+            <div class="dash-task-item" data-id="${t.id}">
+              <label class="dash-task-check">
+                <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTask('${t.id}')">
+                <span class="dash-task-checkmark"></span>
+              </label>
+              <span class="dash-task-title">${esc(t.title)}</span>
+              <span class="dash-cat-dot" style="background:${catStyle(t.category).color}" title="${CATEGORIES[t.category]?.label || ''}"></span>
+            </div>
+          `).join('')}
+          ${incompleteTasks.length === 0 ? '<p class="dash-empty">No pending tasks</p>' : ''}
+          ${incompleteTasks.length > 5 ? `<p class="dash-more" onclick="switchPage('tasks')">+${incompleteTasks.length - 5} more tasks</p>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openTaskModal()">+ Add Task</button>
+      </div>
+
+      <div class="dash-card dash-week-chart">
+        <h3 class="dash-card-title">This Week</h3>
+        <div class="dash-week-bars" id="week-chart"></div>
+      </div>
+    </div>
+  `;
+
+  viewEl.appendChild(wrap);
+  renderBudgetRing(budget);
+  renderWeekChart();
+}
+
+function renderBudgetRing(budget) {
+  const el = document.getElementById('budget-ring');
+  if (!el) return;
+  const size = 180, stroke = 20, radius = (size - stroke) / 2, circ = 2 * Math.PI * radius;
+  let segments = '';
+  let offset = 0;
+  const entries = Object.entries(budget.categoryTotals).filter(([, v]) => v > 0);
+  const total = Math.max(budget.scheduledMinutes, 1);
+
+  const totalForRing = Math.max(budget.scheduledMinutes, 1440);
+  entries.forEach(([key]) => {
+    const min = budget.categoryTotals[key];
+    const pct = min / totalForRing;
+    const len = pct * circ;
+    const cat = CATEGORIES[key];
+    segments += `<circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="${cat.color}" stroke-width="${stroke}" stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size/2} ${size/2})" />`;
+    offset += len;
+  });
+
+  const freePct = budget.freeMinutes / 1440;
+  if (freePct > 0 && !budget.overbooked) {
+    const len = freePct * circ;
+    segments += `<circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="${stroke}" stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size/2} ${size/2})" />`;
+  }
+
+  el.innerHTML = `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="${stroke}" />
+      ${segments}
+    </svg>
+    <div class="budget-ring-center ${budget.overbooked ? 'overbooked' : ''}">
+      <span class="budget-ring-value">${budget.overbooked ? '+' + formatMinutes(budget.scheduledMinutes - 1440) : formatMinutes(budget.freeMinutes)}</span>
+      <span class="budget-ring-label">${budget.overbooked ? 'OVER' : 'free'}</span>
+    </div>
+  `;
+}
+
+function renderWeekChart() {
+  const el = document.getElementById('week-chart');
+  if (!el) return;
+  const weekStart = getMonday(state.currentDate);
+  const todayS = todayStr();
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStart, i);
+    const ds = dateStr(d);
+    const budget = calculateDayBudget(ds);
+    const pct = Math.min(100, (budget.scheduledMinutes / 1440) * 100);
+    const isToday = ds === todayS;
+    html += `<div class="week-bar-col ${isToday ? 'today-col' : ''}">
+      <div class="week-bar-track"><div class="week-bar-fill ${budget.overbooked ? 'overbooked' : ''}" style="height:${pct}%"></div></div>
+      <span class="week-bar-label">${DAYS_MINI[i]}</span>
+      <span class="week-bar-hours">${formatMinutes(budget.scheduledMinutes)}</span>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function toggleTask(id) {
+  const task = state.events.find(e => e.id === id);
+  if (task) {
+    task.completed = !task.completed;
+    saveEvents();
+    renderView();
+  }
+}
+
+function openTaskModal() {
+  openModal(dateStr(state.currentDate), null, null, false, 'task');
+}
+
+// ── Tasks View ──
+function renderTasksView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'tasks-view';
+
+  let tasks = state.events.filter(e => e.type === 'task');
+  if (state.taskFilter === 'incomplete') tasks = tasks.filter(t => !t.completed);
+  else if (state.taskFilter === 'completed') tasks = tasks.filter(t => t.completed);
+
+  if (state.taskSort === 'date') tasks.sort((a, b) => a.date.localeCompare(b.date));
+  else if (state.taskSort === 'priority') {
+    const p = { high: 0, medium: 1, low: 2, undefined: 3 };
+    tasks.sort((a, b) => (p[a.priority] ?? 3) - (p[b.priority] ?? 3));
+  }
+
+  wrap.innerHTML = `
+    <div class="tasks-header">
+      <h2 class="tasks-title">Tasks</h2>
+      <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ New Task</button>
+    </div>
+    <div class="tasks-toolbar">
+      <div class="tasks-filters">
+        <button class="task-filter-btn ${state.taskFilter === 'all' ? 'active' : ''}" onclick="setTaskFilter('all')">All</button>
+        <button class="task-filter-btn ${state.taskFilter === 'incomplete' ? 'active' : ''}" onclick="setTaskFilter('incomplete')">To Do</button>
+        <button class="task-filter-btn ${state.taskFilter === 'completed' ? 'active' : ''}" onclick="setTaskFilter('completed')">Done</button>
+      </div>
+      <div class="tasks-sort">
+        <select onchange="setTaskSort(this.value)">
+          <option value="date" ${state.taskSort === 'date' ? 'selected' : ''}>Sort by Date</option>
+          <option value="priority" ${state.taskSort === 'priority' ? 'selected' : ''}>Sort by Priority</option>
+        </select>
+      </div>
+    </div>
+    <div class="tasks-list">
+      ${tasks.length === 0 ? '<div class="tasks-empty">No tasks found</div>' : ''}
+      ${tasks.map(t => {
+        const cat = catStyle(t.category);
+        const prioClass = t.priority === 'high' ? 'prio-high' : t.priority === 'medium' ? 'prio-med' : 'prio-low';
+        return `<div class="task-row ${t.completed ? 'completed' : ''}">
+          <label class="task-check-label">
+            <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTask('${t.id}')">
+            <span class="task-checkmark"></span>
+          </label>
+          <div class="task-info" onclick="openModal('${t.date}', '${t.id}')">
+            <span class="task-title">${esc(t.title)}</span>
+            <span class="task-meta">
+              <span class="task-cat-dot" style="background:${cat.color}"></span>
+              ${t.date}
+              ${t.priority ? `<span class="task-prio ${prioClass}">${t.priority}</span>` : ''}
+            </span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  viewEl.appendChild(wrap);
+}
+
+function setTaskFilter(f) { state.taskFilter = f; renderView(); }
+function setTaskSort(s) { state.taskSort = s; renderView(); }
+
+// ── Goals View ──
+function renderGoalsView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'goals-view';
+
+  const weekStart = getMonday(state.currentDate);
+  const weekBudget = calculateWeekBudget(weekStart);
+  const score = calculateBalanceScore(weekStart);
+
+  wrap.innerHTML = `
+    <div class="goals-header">
+      <h2 class="goals-title">Weekly Goals</h2>
+      ${score !== null ? `<div class="goals-score ${score >= 75 ? 'score-good' : score >= 50 ? 'score-ok' : 'score-low'}">Score: ${score}/100</div>` : ''}
+    </div>
+    <p class="goals-desc">Set target hours per week for each life category. Your balance score measures how well your schedule matches these goals.</p>
+    <div class="goals-list">
+      ${Object.entries(CATEGORIES).map(([key, cat]) => {
+        const goal = state.goals.find(g => g.category === key);
+        const target = goal ? goal.targetHoursPerWeek : 0;
+        const actualMin = weekBudget.categoryTotals[key] || 0;
+        const actualH = Math.round(actualMin / 6) / 10;
+        const pct = target > 0 ? Math.min(100, (actualMin / (target * 60)) * 100) : 0;
+        return `<div class="goal-row">
+          <div class="goal-cat">
+            <span class="goal-dot" style="background:${cat.color}"></span>
+            <span class="goal-label">${cat.label}</span>
+          </div>
+          <div class="goal-progress">
+            <div class="goal-bar-track"><div class="goal-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+            <span class="goal-actual">${actualH}h / ${target}h</span>
+          </div>
+          <div class="goal-input-wrap">
+            <input type="number" class="goal-input" min="0" max="168" step="0.5" value="${target}" data-cat="${key}" onchange="updateGoal('${key}', this.value)" placeholder="0">
+            <span class="goal-unit">h/wk</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  viewEl.appendChild(wrap);
+}
+
+function updateGoal(category, hours) {
+  const h = parseFloat(hours) || 0;
+  let goal = state.goals.find(g => g.category === category);
+  if (goal) {
+    goal.targetHoursPerWeek = h;
+  } else {
+    state.goals.push({
+      id: 'goal_' + Date.now(),
+      title: CATEGORIES[category]?.label || category,
+      category,
+      targetHoursPerWeek: h,
+      description: '',
+      active: true,
+    });
+  }
+  saveGoals();
+  renderView();
+}
+
+// ── Settings View ──
+function renderSettingsView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  wrap.innerHTML = `
+    <h2 class="settings-title">Settings</h2>
+    <div class="settings-list">
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Default Sleep Hours</span>
+          <span class="setting-desc">Used for all-day sleep events in budget calculations</span>
+        </div>
+        <input type="number" class="setting-input" min="0" max="24" step="0.5" value="${state.preferences.sleepHours}" onchange="updatePref('sleepHours', this.value)">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Daily Work Target</span>
+          <span class="setting-desc">Target work hours per day for reference</span>
+        </div>
+        <input type="number" class="setting-input" min="0" max="24" step="0.5" value="${state.preferences.workHoursTarget}" onchange="updatePref('workHoursTarget', this.value)">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Start Page</span>
+          <span class="setting-desc">Which page to show when the app loads</span>
+        </div>
+        <select class="setting-input" onchange="updatePref('startPage', this.value)">
+          <option value="dashboard" ${state.preferences.startPage === 'dashboard' ? 'selected' : ''}>Dashboard</option>
+          <option value="calendar" ${state.preferences.startPage === 'calendar' ? 'selected' : ''}>Calendar</option>
+        </select>
+      </div>
+    </div>
+  `;
+  viewEl.appendChild(wrap);
+}
+
+function updatePref(key, value) {
+  if (key === 'sleepHours' || key === 'workHoursTarget') value = parseFloat(value) || 0;
+  state.preferences[key] = value;
+  savePreferences();
+}
+
 // ── Modal ──
-function openModal(ds, eventId, startTime, allDay) {
+function trapFocus(e) {
+  if (e.key !== 'Tab') return;
+  const modal = document.querySelector('.modal');
+  const focusable = modal.querySelectorAll('input, textarea, select, button, [tabindex="0"]');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+  } else {
+    if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}
+
+function openModal(ds, eventId, startTime, allDay, type) {
   clearErrors();
   formEl.reset();
-  state.selectedCategory = 'work';
+  state.selectedCategory = 'personal-other';
+  state.editingType = 'event';
+  state.selectedPriority = 'medium';
 
   if (eventId) {
     const ev = state.events.find(e => e.id === eventId);
@@ -620,11 +1148,14 @@ function openModal(ds, eventId, startTime, allDay) {
     fEnd.value = ev.endTime || '10:00';
     fAllDay.checked = ev.allDay;
     fDesc.value = ev.description || '';
-    state.selectedCategory = ev.category || 'work';
+    state.selectedCategory = ev.category || 'personal-other';
+    state.editingType = ev.type || 'event';
+    state.selectedPriority = ev.priority || 'medium';
     deleteBtn.classList.remove('hidden');
   } else {
     state.editingEventId = null;
-    modalTitleEl.textContent = 'New Event';
+    state.editingType = type || 'event';
+    modalTitleEl.textContent = state.editingType === 'task' ? 'New Task' : 'New Event';
     fDate.value = ds || dateStr(state.currentDate);
     fStart.value = startTime || '09:00';
     const [h] = (startTime || '09:00').split(':').map(Number);
@@ -632,14 +1163,22 @@ function openModal(ds, eventId, startTime, allDay) {
     fAllDay.checked = !!allDay;
     deleteBtn.classList.add('hidden');
   }
-  fTimeRow.style.display = fAllDay.checked ? 'none' : '';
+  const isTask = state.editingType === 'task';
+  fTimeRow.style.display = (fAllDay.checked || isTask) ? 'none' : '';
+  document.getElementById('priority-row').style.display = isTask ? '' : 'none';
+  if (isTask) {
+    modalTitleEl.textContent = state.editingEventId ? 'Edit Task' : 'New Task';
+    document.querySelectorAll('.prio-btn').forEach(b => b.classList.toggle('selected', b.dataset.prio === (state.selectedPriority || 'medium')));
+  }
   renderCatPicker();
   modalEl.classList.remove('hidden');
+  document.addEventListener('keydown', trapFocus);
   fTitle.focus();
 }
 
 function closeModal() {
   modalEl.classList.add('hidden');
+  document.removeEventListener('keydown', trapFocus);
   state.editingEventId = null;
   formEl.reset();
   clearErrors();
@@ -679,17 +1218,24 @@ function handleSave(e) {
   e.preventDefault();
   if (!validateForm()) return;
   const isAllDay = fAllDay.checked;
+  const isTask = state.editingType === 'task';
   const data = {
     title: fTitle.value.trim(),
     date: fDate.value,
-    startTime: isAllDay ? '00:00' : (fStart.value || '09:00'),
-    endTime: isAllDay ? '23:59' : (fEnd.value || '10:00'),
+    startTime: (isAllDay || isTask) ? '00:00' : (fStart.value || '09:00'),
+    endTime: (isAllDay || isTask) ? '23:59' : (fEnd.value || '10:00'),
     allDay: isAllDay,
     category: state.selectedCategory,
     description: fDesc.value.trim(),
+    type: state.editingType,
   };
+  if (isTask) {
+    data.priority = state.selectedPriority || 'medium';
+    if (!state.editingEventId) data.completed = false;
+  }
   if (!isAllDay && timeToMin(data.endTime) <= timeToMin(data.startTime)) {
-    data.endTime = `${pad(Math.min(parseInt(data.startTime) + 1, 23))}:00`;
+    const corrected = Math.min(timeToMin(data.startTime) + 60, 1439);
+    data.endTime = `${pad(Math.floor(corrected / 60))}:${pad(corrected % 60)}`;
   }
   if (state.editingEventId) {
     const idx = state.events.findIndex(ev => ev.id === state.editingEventId);
@@ -712,6 +1258,432 @@ function handleDelete() {
   renderAll();
 }
 
+// ── AI Planner ──
+const AI_MAX_REQUESTS = 10;
+const AI_COOLDOWN_MS = 10000;
+const aiState = {
+  requestCount: 0,
+  lastRequestTime: 0,
+  panelOpen: false,
+  loading: false,
+  suggestions: [],
+  demoMode: false,
+  commandHistory: [],
+};
+
+function openAIPanel() {
+  const panel = $('ai-panel');
+  panel.classList.remove('hidden');
+  panel.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => panel.classList.add('open'));
+  aiState.panelOpen = true;
+  updateAIRateLimit();
+}
+
+function closeAIPanel() {
+  const panel = $('ai-panel');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  setTimeout(() => { if (!aiState.panelOpen) panel.classList.add('hidden'); }, 250);
+  aiState.panelOpen = false;
+}
+
+function updateAIRateLimit() {
+  const el = $('ai-rate-limit');
+  if (!el) return;
+  if (aiState.requestCount >= AI_MAX_REQUESTS) {
+    el.textContent = 'Request limit reached for this session';
+  } else if (aiState.requestCount > 0) {
+    el.textContent = `${aiState.requestCount} of ${AI_MAX_REQUESTS} AI requests used`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+function canMakeAIRequest() {
+  if (aiState.requestCount >= AI_MAX_REQUESTS) return { ok: false, reason: 'Request limit reached for this session. Refresh the page to reset.' };
+  const elapsed = Date.now() - aiState.lastRequestTime;
+  if (elapsed < AI_COOLDOWN_MS) {
+    const wait = Math.ceil((AI_COOLDOWN_MS - elapsed) / 1000);
+    return { ok: false, reason: `Please wait ${wait} seconds before the next request.` };
+  }
+  return { ok: true };
+}
+
+function buildAIContext(action, targetDate, command) {
+  const ds = targetDate || todayStr();
+  const budget = calculateDayBudget(ds);
+  const weekStart = getMonday(new Date(ds + 'T00:00:00'));
+  const balanceScore = calculateBalanceScore(weekStart);
+
+  let events = [];
+  if (action === 'plan-week') {
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      events = events.concat(state.events.filter(e => e.date === dateStr(d) && e.type !== 'task'));
+    }
+  } else {
+    events = state.events.filter(e => e.date === ds && e.type !== 'task');
+  }
+
+  const tasks = state.events.filter(e => e.type === 'task' && !e.completed);
+
+  const goals = {};
+  state.goals.filter(g => g.active).forEach(g => {
+    goals[g.category] = g.targetHoursPerWeek;
+  });
+
+  return {
+    action,
+    date: ds,
+    events: events.map(e => ({ id: e.id, title: e.title, date: e.date, startTime: e.startTime, endTime: e.endTime, allDay: e.allDay, category: e.category, type: e.type })),
+    tasks: tasks.map(t => ({ id: t.id, title: t.title, date: t.date, category: t.category, priority: t.priority || 'medium' })),
+    goals,
+    preferences: { sleepHours: state.preferences.sleepHours, workHoursTarget: state.preferences.workHoursTarget },
+    balanceScore: balanceScore !== null ? balanceScore : undefined,
+    budgetSummary: budget.categoryTotals,
+    command: command || undefined,
+  };
+}
+
+async function callAIPlanner(context) {
+  const check = canMakeAIRequest();
+  if (!check.ok) {
+    renderAIError(check.reason);
+    return null;
+  }
+
+  aiState.loading = true;
+  aiState.requestCount++;
+  aiState.lastRequestTime = Date.now();
+  updateAIRateLimit();
+  renderAILoading();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const resp = await fetch('/api/ai-planner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(context),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await resp.json();
+
+    if (data.error) {
+      if (data.code === 'NO_API_KEY' || data.code === 'AUTH_ERROR' || resp.status >= 500) {
+        aiState.demoMode = true;
+        const badge = $('ai-mode-badge');
+        if (badge) badge.classList.remove('hidden');
+        return generateFallbackSuggestions(context);
+      }
+      throw new Error(data.message || 'AI request failed');
+    }
+
+    aiState.demoMode = false;
+    const badge = $('ai-mode-badge');
+    if (badge) badge.classList.add('hidden');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      renderAIError('Request timed out. The AI is taking too long — please try again.');
+      return null;
+    }
+    if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+      aiState.demoMode = true;
+      const badge = $('ai-mode-badge');
+      if (badge) badge.classList.remove('hidden');
+      return generateFallbackSuggestions(context);
+    }
+    renderAIError(err.message || 'Something went wrong. Please try again.');
+    return null;
+  } finally {
+    aiState.loading = false;
+  }
+}
+
+function generateFallbackSuggestions(context) {
+  const suggestions = [];
+  let sugId = 1;
+  const ds = context.date;
+
+  const goals = context.goals || {};
+  const weekStart = getMonday(new Date(ds + 'T00:00:00'));
+  const weekBudget = calculateWeekBudget(weekStart);
+
+  Object.entries(goals).forEach(([cat, targetHours]) => {
+    const actualMin = weekBudget.categoryTotals[cat] || 0;
+    const targetMin = targetHours * 60;
+    if (actualMin < targetMin * 0.5) {
+      const catLabel = CATEGORIES[cat]?.label || cat;
+      const deficit = formatMinutes(targetMin - actualMin);
+      suggestions.push({
+        id: `sug-${sugId++}`,
+        type: 'info',
+        summary: `${catLabel} is behind schedule`,
+        reason: `You've used ${formatMinutes(actualMin)} of your ${targetHours}h weekly goal. Consider scheduling ${deficit} more this week.`,
+        event: null,
+        conflictsWith: [],
+        priority: 'medium',
+      });
+    }
+  });
+
+  const unscheduledTasks = (context.tasks || []).slice(0, 3);
+  unscheduledTasks.forEach(t => {
+    const dayEvents = state.events.filter(e => e.date === ds && e.type !== 'task' && !e.allDay);
+    let freeStart = '09:00';
+    dayEvents.sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime));
+    for (const ev of dayEvents) {
+      if (timeToMin(freeStart) + 60 <= timeToMin(ev.startTime)) break;
+      freeStart = ev.endTime;
+    }
+    const startMin = timeToMin(freeStart);
+    if (startMin < 1200) {
+      const endMin = Math.min(startMin + 60, 1440);
+      suggestions.push({
+        id: `sug-${sugId++}`,
+        type: 'add',
+        summary: `Schedule task: ${t.title}`,
+        reason: `This ${t.priority}-priority task is incomplete. Suggested time slot is available.`,
+        event: {
+          title: t.title,
+          date: ds,
+          startTime: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+          endTime: `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`,
+          category: t.category || 'personal-other',
+          type: 'event',
+          allDay: false,
+        },
+        conflictsWith: [],
+        priority: t.priority || 'medium',
+      });
+    }
+  });
+
+  const budget = calculateDayBudget(ds);
+  if (budget.overbooked) {
+    suggestions.push({
+      id: `sug-${sugId++}`,
+      type: 'info',
+      summary: 'Day is overbooked',
+      reason: `You have ${formatMinutes(budget.scheduledMinutes)} scheduled, exceeding 24 hours by ${formatMinutes(budget.scheduledMinutes - 1440)}. Consider removing or shortening some events.`,
+      event: null,
+      conflictsWith: [],
+      priority: 'high',
+    });
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push({
+      id: `sug-${sugId}`,
+      type: 'info',
+      summary: 'Schedule looks good!',
+      reason: 'No immediate suggestions. Your day is balanced and your goals are on track.',
+      event: null,
+      conflictsWith: [],
+      priority: 'low',
+    });
+  }
+
+  return {
+    suggestions,
+    overview: 'Smart suggestions based on your schedule and goals (demo mode — connect Claude API for advanced planning).',
+    balanceImpact: '',
+  };
+}
+
+function detectConflicts(suggestion) {
+  if (!suggestion.event || suggestion.type === 'info' || suggestion.type === 'remove') return [];
+  const ev = suggestion.event;
+  if (ev.allDay) return [];
+  const newStart = timeToMin(ev.startTime);
+  const newEnd = timeToMin(ev.endTime);
+  return state.events.filter(e =>
+    e.date === ev.date && e.type !== 'task' && !e.allDay &&
+    timeToMin(e.startTime) < newEnd && timeToMin(e.endTime) > newStart
+  ).map(e => ({ id: e.id, title: e.title, time: `${formatTime12(e.startTime)}-${formatTime12(e.endTime)}` }));
+}
+
+function renderAILoading() {
+  const el = $('ai-content');
+  el.innerHTML = `<div class="ai-loading"><div class="ai-spinner"></div><span class="ai-loading-text">Analyzing your schedule...</span></div>`;
+}
+
+function renderAIError(msg) {
+  const el = $('ai-content');
+  el.innerHTML = `<div class="ai-error">${esc(msg)}</div>`;
+}
+
+function renderAISuggestions(result) {
+  if (!result) return;
+  aiState.suggestions = result.suggestions.map(s => ({ ...s, status: null }));
+  const el = $('ai-content');
+  let html = '';
+
+  if (result.overview) {
+    html += `<div class="ai-overview"><strong>AI Analysis:</strong> ${esc(result.overview)}`;
+    if (result.balanceImpact) {
+      html += `<div class="ai-balance-impact">${esc(result.balanceImpact)}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  const actionable = result.suggestions.filter(s => s.type !== 'info');
+  if (actionable.length > 1) {
+    html += `<button class="ai-approve-all" onclick="approveAllSuggestions()">Approve All (${actionable.length} changes)</button>`;
+  }
+
+  result.suggestions.forEach((s, i) => {
+    const conflicts = detectConflicts(s);
+    const typeClass = `ai-sug-type-${s.type}`;
+    html += `<div class="ai-suggestion-card" id="ai-sug-${i}">
+      <div class="ai-sug-body">
+        <div class="ai-sug-header">
+          <span class="ai-sug-type ${typeClass}">${s.type}</span>
+          <span class="ai-sug-summary">${esc(s.summary)}</span>
+        </div>
+        <div class="ai-sug-reason">${esc(s.reason)}</div>`;
+
+    if (s.event) {
+      const cat = catStyle(s.event.category);
+      const timeStr = s.event.allDay ? 'All day' : `${formatTime12(s.event.startTime)} - ${formatTime12(s.event.endTime)}`;
+      html += `<div class="ai-sug-event-preview">
+        <span class="ai-sug-event-dot" style="background:${cat.color}"></span>
+        <span class="ai-sug-event-time">${timeStr}</span>
+        <span class="ai-sug-event-title">${esc(s.event.title)}</span>
+      </div>`;
+    }
+
+    if (conflicts.length > 0) {
+      html += `<div class="ai-sug-conflict">Conflicts with: ${conflicts.map(c => esc(c.title) + ' (' + c.time + ')').join(', ')}</div>`;
+    }
+
+    html += `</div>`;
+
+    if (s.type !== 'info') {
+      html += `<div class="ai-sug-actions">
+        <button class="ai-sug-approve" onclick="approveSuggestion(${i})">Approve</button>
+        <button class="ai-sug-reject" onclick="rejectSuggestion(${i})">Reject</button>
+      </div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function approveSuggestion(index) {
+  const s = aiState.suggestions[index];
+  if (!s || s.status) return;
+
+  if (s.event && !s.event.allDay && s.event.startTime && s.event.endTime) {
+    if (timeToMin(s.event.endTime) <= timeToMin(s.event.startTime)) {
+      const corrected = Math.min(timeToMin(s.event.startTime) + 60, 1439);
+      s.event.endTime = `${pad(Math.floor(corrected / 60))}:${pad(corrected % 60)}`;
+    }
+  }
+
+  if (s.type === 'add' && s.event) {
+    const newEvent = {
+      id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      title: s.event.title,
+      date: s.event.date,
+      startTime: s.event.startTime || '09:00',
+      endTime: s.event.endTime || '10:00',
+      allDay: s.event.allDay || false,
+      category: s.event.category || 'personal-other',
+      description: '',
+      type: s.event.type || 'event',
+      completed: false,
+    };
+    state.events.push(newEvent);
+    saveEvents();
+  } else if (s.type === 'move' && s.targetEventId && s.event) {
+    const existing = state.events.find(e => e.id === s.targetEventId);
+    if (existing) {
+      existing.date = s.event.date || existing.date;
+      existing.startTime = s.event.startTime || existing.startTime;
+      existing.endTime = s.event.endTime || existing.endTime;
+      saveEvents();
+    }
+  } else if (s.type === 'resize' && s.targetEventId && s.event) {
+    const existing = state.events.find(e => e.id === s.targetEventId);
+    if (existing) {
+      existing.startTime = s.event.startTime || existing.startTime;
+      existing.endTime = s.event.endTime || existing.endTime;
+      saveEvents();
+    }
+  } else if (s.type === 'remove' && s.targetEventId) {
+    state.events = state.events.filter(e => e.id !== s.targetEventId);
+    saveEvents();
+  }
+
+  s.status = 'approved';
+  markSuggestionDone(index, 'approved');
+  renderView();
+}
+
+function rejectSuggestion(index) {
+  const s = aiState.suggestions[index];
+  if (!s || s.status) return;
+  s.status = 'rejected';
+  markSuggestionDone(index, 'rejected');
+}
+
+function markSuggestionDone(index, status) {
+  const card = document.getElementById(`ai-sug-${index}`);
+  if (!card) return;
+  card.classList.add('ai-sug-done');
+  const actions = card.querySelector('.ai-sug-actions');
+  if (actions) {
+    actions.innerHTML = `<div class="ai-sug-status ai-sug-status-${status}">${status}</div>`;
+  }
+}
+
+function approveAllSuggestions() {
+  aiState.suggestions.forEach((s, i) => {
+    if (!s.status && s.type !== 'info') {
+      approveSuggestion(i);
+    }
+  });
+}
+
+async function handlePlanDay(targetDate) {
+  if (aiState.loading) return;
+  openAIPanel();
+  const context = buildAIContext('plan-day', targetDate);
+  const result = await callAIPlanner(context);
+  if (result) renderAISuggestions(result);
+}
+
+async function handlePlanWeek() {
+  if (aiState.loading) return;
+  openAIPanel();
+  const context = buildAIContext('plan-week');
+  const result = await callAIPlanner(context);
+  if (result) renderAISuggestions(result);
+}
+
+async function handleAICommand(command) {
+  if (aiState.loading || !command.trim()) return;
+  aiState.commandHistory = [command, ...aiState.commandHistory.filter(c => c !== command)].slice(0, 10);
+  try { localStorage.setItem('chronosAIHistory', JSON.stringify(aiState.commandHistory)); } catch {}
+  const context = buildAIContext('command', todayStr(), command.trim());
+  const result = await callAIPlanner(context);
+  if (result) renderAISuggestions(result);
+}
+
+function loadCommandHistory() {
+  try {
+    const raw = localStorage.getItem('chronosAIHistory');
+    aiState.commandHistory = raw ? JSON.parse(raw) : [];
+  } catch { aiState.commandHistory = []; }
+}
+
 // ── Navigation ──
 function navigate(dir) {
   const d = state.currentDate;
@@ -727,7 +1699,7 @@ function navigate(dir) {
 }
 
 function goToday() {
-  state.currentDate = new Date(now);
+  state.currentDate = new Date();
   renderAll();
 }
 
@@ -739,7 +1711,11 @@ function switchView(v) {
     b.classList.toggle('active', isActive);
     b.setAttribute('aria-selected', String(isActive));
   });
-  renderAll();
+  if (state.currentPage !== 'calendar') {
+    switchPage('calendar');
+  } else {
+    renderAll();
+  }
 }
 
 // ── Sidebar ──
@@ -759,7 +1735,10 @@ function updateNowIndicator() {
 }
 
 // ── Escape HTML ──
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // ── Render All ──
 function renderAll() {
@@ -767,6 +1746,7 @@ function renderAll() {
   renderView();
   state.miniCalDate = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), 1);
   renderMiniCal();
+  renderCalList();
 }
 
 // ── Event Listeners ──
@@ -783,7 +1763,20 @@ deleteBtn.addEventListener('click', handleDelete);
 modalEl.addEventListener('click', e => { if (e.target === modalEl) closeModal(); });
 $('mini-prev').addEventListener('click', () => { state.miniCalDate.setMonth(state.miniCalDate.getMonth() - 1); renderMiniCal(); });
 $('mini-next').addEventListener('click', () => { state.miniCalDate.setMonth(state.miniCalDate.getMonth() + 1); renderMiniCal(); });
-fAllDay.addEventListener('change', () => { fTimeRow.style.display = fAllDay.checked ? 'none' : ''; });
+fAllDay.addEventListener('change', () => { fTimeRow.style.display = (fAllDay.checked || state.editingType === 'task') ? 'none' : ''; });
+
+// Sidebar Nav
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => switchPage(btn.dataset.page));
+});
+
+// Priority Picker
+document.querySelectorAll('.prio-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.selectedPriority = btn.dataset.prio;
+    document.querySelectorAll('.prio-btn').forEach(b => b.classList.toggle('selected', b === btn));
+  });
+});
 fTitle.addEventListener('input', () => { errTitle.textContent = ''; });
 fDate.addEventListener('input', () => { errDate.textContent = ''; });
 
@@ -791,27 +1784,57 @@ document.querySelectorAll('.view-switcher button').forEach(btn => {
   btn.addEventListener('click', () => switchView(btn.dataset.view));
 });
 
+// AI Panel
+$('ai-panel-close').addEventListener('click', closeAIPanel);
+$('ai-plan-day').addEventListener('click', () => handlePlanDay());
+$('ai-plan-week').addEventListener('click', () => handlePlanWeek());
+$('ai-command-send').addEventListener('click', () => {
+  const input = $('ai-command-input');
+  handleAICommand(input.value);
+  input.value = '';
+});
+$('ai-command-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const input = $('ai-command-input');
+    handleAICommand(input.value);
+    input.value = '';
+  }
+});
+
 document.addEventListener('keydown', e => {
   if (!modalEl.classList.contains('hidden')) {
     if (e.key === 'Escape') closeModal();
     return;
   }
+  if (aiState.panelOpen && e.key === 'Escape') {
+    closeAIPanel();
+    return;
+  }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   switch (e.key) {
     case 't': goToday(); break;
-    case 'd': switchView('day'); break;
-    case 'w': switchView('week'); break;
-    case 'm': switchView('month'); break;
-    case 'a': switchView('agenda'); break;
-    case 'y': switchView('year'); break;
+    case 'b': switchPage('dashboard'); break;
+    case 'g': switchPage('goals'); break;
+    case 'p': handlePlanDay(); break;
+    case 'd': switchPage('calendar'); switchView('day'); break;
+    case 'w': switchPage('calendar'); switchView('week'); break;
+    case 'm': switchPage('calendar'); switchView('month'); break;
+    case 'a': switchPage('calendar'); switchView('agenda'); break;
+    case 'y': switchPage('calendar'); switchView('year'); break;
     case 'c': openModal(dateStr(state.currentDate)); break;
-    case 'ArrowLeft': navigate(-1); break;
-    case 'ArrowRight': navigate(1); break;
+    case 'ArrowLeft': if (state.currentPage === 'calendar') navigate(-1); break;
+    case 'ArrowRight': if (state.currentPage === 'calendar') navigate(1); break;
   }
 });
 
 // ── Init ──
 state.events = loadEvents();
+state.goals = loadGoals();
+state.preferences = loadPreferences();
+loadCommandHistory();
+state.currentPage = state.preferences.startPage || 'dashboard';
 document.querySelectorAll('.view-switcher button').forEach(b => b.classList.toggle('active', b.dataset.view === state.currentView));
 renderCalList();
-renderAll();
+switchPage(state.currentPage);
 setInterval(updateNowIndicator, 60000);
