@@ -217,14 +217,97 @@ All critical, important, and polish items from the audit fixed (26 of 27 — P7 
 - AI panel has `aria-hidden="true"` in initial markup (I12)
 - Removed unused `form-row-date` class (P6)
 
-## V4 Ideas (Not Started)
+## V4.1 Personalization — Dynamic Category Management
 
-- Recurring events and habits
+### What Changed
+
+**Category System (app.js):**
+- Replaced hardcoded `CATEGORIES` const with dynamic localStorage-backed system
+- Categories stored in `chronosCategories` with full metadata (id, label, color, type, status, order)
+- `DEFAULT_CATEGORIES` seeds 7 default categories on first load
+- `rebuildCategories()` keeps the `CATEGORIES` variable in sync — all existing code works unchanged
+- Sleep marked as `type: "system"` (non-archivable); others are `type: "user"`
+- Data version bumped from 2 to 3
+- Added: `loadCategories()`, `saveCategories()`, `rebuildCategories()`, `getAllCategories()`, `categoryExists()`
+- Added: `generateColorVariants()`, `toKebabCase()`, `uniqueCategoryId()` utilities
+- Updated `catStyle()` to fall back to gray for archived/unknown categories
+- Updated `renderCatPicker()` to include archived category when editing old events
+- Updated `buildAIContext()` to send dynamic category list in payload
+
+**Category Management UI (app.js):**
+- New `categories` page accessible from "Manage Categories" link in sidebar
+- Full CRUD: add, edit (name + color), archive, restore categories
+- Up/down reorder buttons update `order` field
+- Color picker with 16 presets + custom hex input
+- Archived section with collapsed/expanded toggle
+- Max 15 active categories enforced
+- System categories (Sleep) cannot be archived
+
+**AI Planner (ai-planner.js):**
+- System prompt now built dynamically via `buildSystemPrompt(categories)`
+- Categories read from request payload instead of hardcoded list
+- Falls back to default 7 if no categories in payload
+
+**Styles (style.css):**
+- Added ~170 lines: category management view, editor, color picker, archived section, reorder controls
+- `.cal-manage-link` in sidebar
+- Responsive: categories view gets mobile padding at 480px
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `app.js` | Dynamic category system, management UI, CRUD functions, color utilities |
+| `style.css` | Category management styles, color picker, sidebar link |
+| `netlify/functions/ai-planner.js` | Dynamic system prompt from request categories |
+| `tasks/todo.md` | V4.1 implementation checklist |
+| `PROGRESS.md` | This section |
+
+### Data Model
+
+```
+Category (stored in chronosCategories):
+{
+  id: string,           // kebab-case slug, immutable after creation
+  label: string,        // display name
+  color: string,        // hex color
+  light: string,        // rgba background variant
+  dark: string,         // darker text variant
+  type: "system"|"user",
+  status: "active"|"archived",
+  order: number,        // display order
+  createdAt: string,    // ISO date
+  archivedAt: string|null
+}
+```
+
+## Next Steps — V5
+
+V5 should focus on **Recurring Events & Habits** — the most-requested missing feature that unlocks real daily-use value.
+
+### V5.0 — Recurring Events & Habits
+- Recurrence rules: daily, weekly, biweekly, monthly, custom (e.g. "Mon/Wed/Fri")
+- Recurrence stored as a rule on the parent event; individual occurrences generated at render time
+- Edit/delete: "this occurrence", "this and future", "all occurrences"
+- Habits: recurring tasks with streak tracking (days completed in a row)
+- Dashboard habit widget showing current streaks and completion rate
+- AI planner aware of recurrence — avoids conflicts with recurring events
+
+### V5.1 — Data Export/Import
+- Export all data (events, categories, goals, preferences) as JSON
+- Import JSON with merge strategy (skip duplicates, overwrite, or append)
+- Useful for backup, device transfer, and sharing templates
+
+### V5.2 — Dark Mode
+- CSS custom property theming (light/dark)
+- System preference detection via `prefers-color-scheme`
+- Manual toggle in Settings, persisted in localStorage
+- All category colors, charts, and AI panel must adapt
+
+### Future Ideas (Unprioritized)
 - Time tracking (actual vs planned)
 - Smart notifications / reminders
 - Weekly/monthly trend analysis and insights
 - Protected time blocks ("never schedule over sleep")
 - AI-driven overbooking resolution
-- Data export/import (JSON)
-- Dark mode
 - Multi-day event support

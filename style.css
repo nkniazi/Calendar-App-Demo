@@ -1958,6 +1958,177 @@ button:focus:not(:focus-visible) { outline: none; }
   .year-view { grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; }
   .agenda-view { padding: 16px; }
 }
+/* ── Category Management ── */
+.cal-manage-link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--sidebar-text);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  padding: 6px 8px;
+  margin-top: 4px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.cal-manage-link:hover { opacity: 1; }
+
+.categories-view {
+  padding: 24px 32px;
+  max-width: 640px;
+  overflow-y: auto;
+  height: 100%;
+}
+.cat-mgmt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.cat-mgmt-title { font-size: 1.4rem; font-weight: 700; }
+.cat-mgmt-desc {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-bottom: 20px;
+}
+.cat-mgmt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cat-mgmt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  transition: background 0.1s;
+}
+.cat-mgmt-row:hover { background: var(--hover); }
+.cat-mgmt-row.archived { opacity: 0.65; }
+.cat-mgmt-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.cat-reorder-btn {
+  background: none;
+  border: none;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1.1;
+}
+.cat-reorder-btn:hover:not(:disabled) { color: var(--text); }
+.cat-reorder-btn:disabled { opacity: 0.25; cursor: default; }
+.cat-mgmt-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cat-mgmt-label {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.cat-mgmt-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--border-light);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.cat-mgmt-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.btn-xs {
+  padding: 3px 8px;
+  font-size: 0.7rem;
+}
+.cat-archive-btn { color: var(--danger); }
+
+.cat-mgmt-archived { margin-top: 20px; }
+.cat-archived-toggle {
+  background: none;
+  border: none;
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cat-archived-toggle::before {
+  content: '\25B6';
+  font-size: 0.55rem;
+  transition: transform 0.2s;
+}
+.cat-archived-toggle.expanded::before { transform: rotate(90deg); }
+.cat-archived-list { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+
+/* Category Editor */
+.cat-editor-area { margin-top: 24px; }
+.cat-editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.cat-editor-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.cat-color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cat-color-swatch {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.cat-color-swatch:hover { transform: scale(1.15); }
+.cat-color-swatch.selected { border-color: var(--text); transform: scale(1.15); }
+.cat-color-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.cat-hex-input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+.cat-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 @media (max-width: 768px) {
   .ai-panel { width: 100%; }
 }
@@ -1970,7 +2141,7 @@ button:focus:not(:focus-visible) { outline: none; }
   .year-view { grid-template-columns: repeat(2, 1fr); }
   .modal { width: 96%; }
   form { padding: 16px; }
-  .dashboard-view, .tasks-view, .goals-view, .settings-view { padding: 16px; }
+  .dashboard-view, .tasks-view, .goals-view, .settings-view, .categories-view { padding: 16px; }
   .dash-stats { grid-template-columns: repeat(2, 1fr); }
   .dash-cat-label { min-width: 100px; font-size: 0.7rem; }
   .tasks-toolbar { flex-direction: column; align-items: stretch; }

@@ -1101,3 +1101,312 @@ Browser (app.js) → fetch('/api/ai-planner') → Netlify Function → Claude AP
 - [x] P8: More robust JSON extraction in AI response parser
 - [x] P9: Optimize esc() function (string replace instead of DOM)
 - [x] P10: Better overbooked ring center display (shows overage amount)
+
+---
+
+# V4.1 — Personalization: Dynamic Category Management
+
+> **Vision:** "My Life, My Categories"
+>
+> Replace the hardcoded 7 life categories with a dynamic, user-managed category system.
+> Users can add, rename, edit, reorder, archive, and restore categories.
+> System categories (Sleep) remain protected. Historical data is preserved
+> when categories are archived.
+
+---
+
+## Spec Notes
+
+The provided spec was truncated (sections 2–5 missing, section 7 cut off).
+What IS specified:
+- Section 6: Category Management (add, rename, edit, reorder, archive, restore)
+- Section 7: System Categories vs User Categories (system / user / archived distinction)
+- Supporting different "life structures"
+
+What is NOT specified (waiting for clarification if needed):
+- Sections 2–5 of the spec (content was cut off in the pasted document)
+- Full details of "life structures" / templates
+- Whether goals should merge into the category model or stay separate
+
+This plan covers what was specified. Excluded: V4 Ideas from PROGRESS.md
+(recurring events, time tracking, dark mode, etc.) per the spec instruction.
+
+---
+
+## Current Architecture (What Changes)
+
+**Today:** `CATEGORIES` is a `const` object at `app.js:14` with 7 hardcoded entries.
+Every part of the app iterates `Object.entries(CATEGORIES)`:
+- Sidebar "My Calendars" list (`renderCalList`)
+- Category picker in event modal (`renderCatPicker`)
+- Dashboard category bars, budget ring, week chart
+- Budget engine (`calculateDayBudget`, `calculateWeekBudget`)
+- Goals view (`renderGoalsView`)
+- AI context builder (`buildAIContext`)
+- AI system prompt (hardcoded in `ai-planner.js:23-30`)
+- Fallback suggestion generator
+- Category migration map (V1→V2)
+
+**After V4.1:** Categories stored in `chronosCategories` (localStorage).
+A `getCategories()` function replaces direct `CATEGORIES` access everywhere.
+Data version bumps from 2 → 3 with migration that seeds current 7 categories.
+
+---
+
+## Data Model
+
+### Category (new — stored in `chronosCategories`)
+
+```
+{
+  id: string,              // kebab-case slug, e.g. "work-money", "learning"
+  label: string,           // display name, e.g. "Work / Money"
+  color: string,           // hex, e.g. "#6366f1"
+  light: string,           // rgba for backgrounds
+  dark: string,            // hex for text on light bg
+  type: "system"|"user",   // system = non-deletable (Sleep)
+  status: "active"|"archived",
+  order: number,           // display order (0-based)
+  createdAt: string,       // ISO date
+  archivedAt: string|null  // ISO date when archived, null if active
+}
+```
+
+### System Categories
+
+Only **Sleep** is a true system category:
+- Cannot be deleted or archived
+- Has special budget treatment (sleepHours preference)
+- Can still be renamed, recolored, reordered
+
+All other default categories (Faith, Work/Money, etc.) start as `type: "user"`
+and can be fully managed. "Free Time" and "Scheduled Time" are computed values
+in the budget engine, not categories — they don't need entries.
+
+### Category Limits
+
+- Maximum 15 active categories (prevents UI clutter)
+- Minimum 1 (Sleep, cannot be archived)
+- Category IDs are immutable after creation (events reference them)
+- Archived categories preserve all historical events, tasks, and goals
+
+---
+
+## Implementation Plan
+
+### Phase 22: Category Data Model & Migration
+
+- [x] **22.1** Create `loadCategories()` / `saveCategories()` functions
+  - Read from `chronosCategories` localStorage key
+  - Return array of category objects sorted by `order`
+  - On first load (key missing), seed with current 7 categories
+  - **AC**: Categories load from localStorage; default seed matches current CATEGORIES
+
+- [x] **22.2** Create `getCategories()` accessor replacing the `CATEGORIES` const
+  - Returns an object `{ id: { label, color, light, dark, ... } }` for backward compat
+  - Filters to `status === "active"` only (archived categories excluded from normal UI)
+  - **AC**: `getCategories()` returns same shape as current CATEGORIES; all code that
+    uses CATEGORIES can switch without logic changes
+
+- [x] **22.3** Create `getAllCategories()` for admin views
+  - Returns all categories including archived
+  - Used only in category management UI
+  - **AC**: Returns full list; archived categories have `status: "archived"`
+
+- [x] **22.4** Bump data version to 3, add migration
+  - In `loadEvents()`, detect version 2 → 3
+  - Migration: seed `chronosCategories` from current hardcoded CATEGORIES
+  - All 7 default categories get `type: "user"` except `sleep` → `type: "system"`
+  - Set `order` 0-6, `status: "active"`, `createdAt` to migration date
+  - Keep V1→V2 category migration working (runs first if version < 2)
+  - **AC**: Upgrading from V2 creates chronosCategories with 7 entries; existing events untouched
+
+- [x] **22.5** Replace `CATEGORIES` const with `getCategories()` call throughout app.js
+  - Replace `Object.entries(CATEGORIES)` → `Object.entries(getCategories())`
+  - Replace `CATEGORIES[key]` → `getCategories()[key]`
+  - Replace `Object.keys(CATEGORIES)` → `Object.keys(getCategories())`
+  - Keep `catStyle()` working (falls back to a default for unknown categories)
+  - **AC**: App functions identically after swap; no visual changes
+
+- [x] **22.6** Update `catStyle()` to handle archived/unknown categories gracefully
+  - If category ID not found in active categories, check archived
+  - If still not found, return a neutral gray style
+  - **AC**: Events with archived categories still render (gray) on calendar; no crashes
+
+### Phase 23: Category Management UI
+
+- [x] **23.1** Add "Manage Categories" button to sidebar calendar list
+  - Small gear icon or "Edit" link below the category toggles
+  - Opens the category management panel (reuses calendar-view area)
+  - **AC**: Button visible in sidebar; clicking opens management UI
+
+- [x] **23.2** Build category management view
+  - List all active categories with: color dot, name, type badge (system/user), drag handle
+  - Each row has Edit and Archive buttons (no Archive for system categories)
+  - "Add Category" button at bottom
+  - "Archived" section collapsed at bottom showing archived categories with Restore button
+  - **AC**: All categories listed; system badge shown on Sleep; archived section works
+
+- [x] **23.3** Implement "Add Category" flow
+  - Modal or inline form: name (required), color picker, description (optional)
+  - Auto-generate ID from name (kebab-case, deduplicated)
+  - Auto-generate `light` and `dark` color variants from chosen color
+  - Validate: name not empty, not duplicate, max 15 active categories
+  - **AC**: New category appears in sidebar, category picker, goals, and AI context
+
+- [x] **23.4** Implement "Edit Category" flow
+  - Click edit on any category (including system)
+  - Edit: name, color, description
+  - ID never changes (events reference it)
+  - Propagates immediately: sidebar, picker, dashboard, budget, goals all update
+  - **AC**: Editing a category name/color updates everywhere instantly
+
+- [x] **23.5** Implement "Archive Category"
+  - Confirmation dialog: "Archive [Name]? Events and tasks in this category will
+    be preserved but the category won't appear in the picker or goals."
+  - Sets `status: "archived"`, `archivedAt: new Date().toISOString()`
+  - Category disappears from: sidebar toggles, category picker, goals view, AI context
+  - Category preserved in: event rendering (shown as gray), budget calculations (historical)
+  - Cannot archive system categories or the last active category
+  - **AC**: Archived category's events still visible on calendar (gray); category gone from picker
+
+- [x] **23.6** Implement "Restore Category"
+  - In archived section, click "Restore"
+  - Sets `status: "active"`, `archivedAt: null`
+  - Category reappears everywhere with its original color
+  - Check max 15 active limit before restoring
+  - **AC**: Restored category reappears in sidebar, picker, goals; events regain their color
+
+- [x] **23.7** Implement category reordering
+  - Up/Down arrow buttons on each category row (simple, no drag-and-drop library)
+  - Updates `order` field on all categories
+  - Order reflected in: sidebar, category picker, dashboard bars, goals
+  - **AC**: Moving a category up/down changes its position everywhere
+
+### Phase 24: Integration Updates
+
+- [x] **24.1** Update `renderCalList()` to use dynamic categories
+  - Iterate `getCategories()` instead of CATEGORIES
+  - Respect category order
+  - **AC**: Sidebar shows categories in user-defined order; new categories appear
+
+- [x] **24.2** Update `renderCatPicker()` to use dynamic categories
+  - Show only active categories in event/task modal
+  - If editing an event with an archived category, include that category too
+  - **AC**: Picker shows active categories; editing old event with archived cat still works
+
+- [x] **24.3** Update Dashboard (budget, bars, goals) to use dynamic categories
+  - `calculateDayBudget()`: iterate dynamic categories
+  - Dashboard category bars: show only active categories
+  - Budget ring: segments for active categories only
+  - **AC**: Dashboard reflects current category set; adding a category adds a bar
+
+- [x] **24.4** Update Goals view to use dynamic categories
+  - Show goal inputs for all active categories
+  - Preserve goal data for archived categories (don't delete)
+  - When a category is restored, its goal reappears
+  - **AC**: Goals track active categories; archived goals hidden but preserved
+
+- [x] **24.5** Update AI planner context and system prompt
+  - `buildAIContext()`: send dynamic category list to the function
+  - `ai-planner.js`: read categories from request payload instead of hardcoded list
+  - Update system prompt to list categories dynamically from request
+  - **AC**: AI knows about user's custom categories; suggestions use correct category IDs
+
+- [x] **24.6** Update `state.activeCategories` initialization
+  - Currently `new Set(Object.keys(CATEGORIES))` at line 43
+  - Change to initialize from `getCategories()` on load
+  - When categories change, sync activeCategories (add new, keep existing)
+  - **AC**: New categories auto-added to active filter; archived removed
+
+### Phase 25: Category Color Utilities
+
+- [x] **25.1** Build color picker component for category editor
+  - Preset palette of 12-16 colors (avoiding duplicates with existing categories)
+  - Custom hex input as fallback
+  - **AC**: User can pick from presets or enter a custom hex color
+
+- [x] **25.2** Implement `generateColorVariants(hexColor)` function
+  - Given a hex color, generate `light` (rgba at 0.13 opacity) and `dark` (darkened)
+  - Used when creating or editing categories so user only picks one color
+  - **AC**: Generated light/dark variants match the visual style of default categories
+
+### Phase 26: Styles for Category Management
+
+- [x] **26.1** Add CSS for category management view
+  - Category list with rows, edit/archive buttons, reorder controls
+  - Add/edit form styling
+  - Archived section with collapsed/expanded state
+  - Color picker grid
+  - **AC**: Category management UI is polished and consistent with existing design
+
+- [x] **26.2** Add styles for archived category rendering on calendar
+  - Events with archived categories shown with gray color and subtle opacity
+  - Tooltip or indicator showing "Archived category"
+  - **AC**: Archived category events are distinguishable but still readable
+
+### Phase 27: Testing & Deployment
+
+- [x] **27.1** Test V1/V2/V3 regression
+  - All calendar views, event CRUD, tasks, goals, budget, AI planner
+  - **AC**: Every existing feature works after the refactor
+
+- [x] **27.2** Test category management
+  - Add a category → appears everywhere (sidebar, picker, goals, AI)
+  - Edit a category name/color → updates everywhere
+  - Archive a category → events preserved, category hidden from UI
+  - Restore a category → fully reappears with original data
+  - Reorder categories → new order reflected in all lists
+  - **AC**: All CRUD operations work; data persists across reloads
+
+- [x] **27.3** Test migration path
+  - Clear localStorage, load app → 7 default categories seeded
+  - Existing V2 data → categories migrated, events unchanged
+  - **AC**: Both fresh install and upgrade paths work
+
+- [x] **27.4** Test edge cases
+  - Event with archived category renders correctly
+  - Max 15 categories enforced
+  - System category (Sleep) cannot be archived/deleted
+  - Category picker when editing event with archived category
+  - AI planner receives correct dynamic category list
+  - **AC**: No crashes on edge cases; validation messages shown
+
+- [x] **27.5** Deploy to Netlify
+  - `netlify deploy --prod`
+  - Verify live site
+  - **AC**: V4.1 live at production URL
+
+---
+
+## Files That Will Change
+
+| File | Changes |
+|------|---------|
+| `app.js` | Replace CATEGORIES const with dynamic system; add category CRUD functions; update all renderers; add management UI; add color utilities; data migration |
+| `index.html` | Minimal — possibly add a category management section or modal |
+| `style.css` | Add category management view styles, color picker, archived indicators |
+| `netlify/functions/ai-planner.js` | Read categories from request payload; build dynamic system prompt |
+| `tasks/todo.md` | This plan |
+| `PROGRESS.md` | V4.1 documentation when complete |
+
+## What V4.1 Does NOT Include
+
+- Recurring events, time tracking, dark mode (listed in V4 Ideas — separate effort)
+- Drag-and-drop reordering (uses simple up/down buttons to avoid library dependency)
+- Category icons/emojis (spec mentions icons but keeping scope minimal — color dots suffice)
+- "Life structure" templates (spec was truncated; can add later if specified)
+- Merging goals into the category model (goals stay as separate localStorage key)
+
+---
+
+## Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Refactoring CATEGORIES breaks everything | Phase 22.5 is a mechanical find-replace; `getCategories()` returns same shape |
+| Events reference deleted category ID | Categories are archived, never deleted; `catStyle()` falls back to gray |
+| Migration corrupts data | Version check is sequential (1→2→3); backup created before migration |
+| AI planner confused by custom categories | Send full category list in payload; system prompt built dynamically |
+| Too many categories clutters UI | Max 15 active limit; archived section collapsed by default |
+| Color variants don't look good | Provide preset palette; custom colors use the same RGBA formula as defaults |

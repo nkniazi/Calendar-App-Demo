@@ -16,18 +16,25 @@ function getCorsHeaders(origin) {
   };
 }
 
-const SYSTEM_PROMPT = `You are LifeBalance AI, an intelligent personal time manager. You analyze the user's calendar, tasks, goals, and preferences to suggest optimal schedule changes.
+const DEFAULT_CATEGORIES = [
+  { id: 'faith', label: 'Faith' },
+  { id: 'sleep', label: 'Sleep' },
+  { id: 'work-money', label: 'Work / Money' },
+  { id: 'food-meals', label: 'Food / Meals' },
+  { id: 'family', label: 'Family / Relationships' },
+  { id: 'entertainment', label: 'Entertainment / Recreation' },
+  { id: 'personal-other', label: 'Personal / Other' },
+];
+
+function buildSystemPrompt(categories) {
+  const cats = (categories && categories.length > 0) ? categories : DEFAULT_CATEGORIES;
+  const catLines = cats.map(c => `- ${sanitize(c.id, 40)}: ${sanitize(c.label, 60)}`).join('\n');
+  return `You are LifeBalance AI, an intelligent personal time manager. You analyze the user's calendar, tasks, goals, and preferences to suggest optimal schedule changes.
 
 You MUST respond with valid JSON only — no markdown, no explanation outside the JSON.
 
 ## Life Categories
-- faith: Faith
-- sleep: Sleep
-- work-money: Work / Money
-- food-meals: Food / Meals
-- family: Family / Relationships
-- entertainment: Entertainment / Recreation
-- personal-other: Personal / Other
+${catLines}
 
 ## 10 Scheduling Rules (follow strictly)
 1. Fixed commitments first — Never move or remove events the user has already scheduled for work, sleep, or faith unless they explicitly ask.
@@ -71,6 +78,7 @@ For "info" type suggestions, the "event" field can be null — these are just ob
 For "move" type, include both the original event id in "targetEventId" and the new time in "event".
 For "remove" type, include the event id in "targetEventId" and set "event" to null.
 Keep suggestions practical, specific, and actionable.`;
+}
 
 const MAX_PAYLOAD_BYTES = 50 * 1024;
 const MAX_COMMAND_LENGTH = 500;
@@ -248,7 +256,7 @@ exports.handler = async (event) => {
     const response = await client.messages.create({
       model: 'claude-sonnet-5-5',
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(body.categories),
       messages: [{ role: 'user', content: userMessage }],
       timeout: 20000,
     });

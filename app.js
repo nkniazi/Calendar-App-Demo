@@ -3,7 +3,9 @@ const STORAGE_KEY = 'chronosEvents';
 const GOALS_KEY = 'chronosGoals';
 const PREFS_KEY = 'chronosPreferences';
 const DATA_VERSION_KEY = 'chronosDataVersion';
-const CURRENT_DATA_VERSION = 2;
+const CATEGORIES_KEY = 'chronosCategories';
+const CURRENT_DATA_VERSION = 3;
+const MAX_ACTIVE_CATEGORIES = 15;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -11,7 +13,7 @@ const DAYS_MINI = ['M','T','W','T','F','S','S'];
 const HOUR_H = 60;
 const MAX_MONTH_EVENTS = 3;
 
-const CATEGORIES = {
+const DEFAULT_CATEGORIES = {
   'faith':          { label: 'Faith',                      color: '#8b5cf6', light: 'rgba(139,92,246,0.13)',  dark: '#6d28d9' },
   'sleep':          { label: 'Sleep',                      color: '#64748b', light: 'rgba(100,116,139,0.13)', dark: '#475569' },
   'work-money':     { label: 'Work / Money',               color: '#6366f1', light: 'rgba(99,102,241,0.13)',  dark: '#4338ca' },
@@ -20,6 +22,7 @@ const CATEGORIES = {
   'entertainment':  { label: 'Entertainment / Recreation', color: '#10b981', light: 'rgba(16,185,129,0.13)',  dark: '#047857' },
   'personal-other': { label: 'Personal / Other',           color: '#06b6d4', light: 'rgba(6,182,212,0.13)',   dark: '#0e7490' },
 };
+let CATEGORIES = { ...DEFAULT_CATEGORIES };
 
 const CATEGORY_MIGRATION = {
   work: 'work-money',
@@ -32,6 +35,7 @@ const CATEGORY_MIGRATION = {
 
 // ── State ──
 const state = {
+  categories: [],
   currentDate: new Date(),
   currentPage: 'dashboard',
   currentView: localStorage.getItem('chronosView') || 'week',
@@ -104,7 +108,12 @@ function formatTime12(t) {
   return m === 0 ? `${hr} ${p}` : `${hr}:${pad(m)} ${p}`;
 }
 
-function catStyle(cat) { return CATEGORIES[cat] || CATEGORIES['personal-other']; }
+function catStyle(cat) {
+  if (CATEGORIES[cat]) return CATEGORIES[cat];
+  const archived = state.categories.find(c => c.id === cat && c.status === 'archived');
+  if (archived) return { label: archived.label, color: '#94a3b8', light: 'rgba(148,163,184,0.13)', dark: '#64748b' };
+  return CATEGORIES['personal-other'] || { label: 'Other', color: '#94a3b8', light: 'rgba(148,163,184,0.13)', dark: '#64748b' };
+}
 
 // ── Storage ──
 function loadEvents() {
@@ -127,7 +136,7 @@ function loadEvents() {
       if (version < 2 && e.category && CATEGORY_MIGRATION[e.category]) {
         e.category = CATEGORY_MIGRATION[e.category];
       }
-      if (!e.category || !CATEGORIES[e.category]) e.category = 'personal-other';
+      if (!e.category || !categoryExists(e.category)) e.category = 'personal-other';
       return e;
     });
     if (version < CURRENT_DATA_VERSION) {
@@ -161,6 +170,71 @@ function loadPreferences() {
 }
 function savePreferences() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(state.preferences)); } catch {}
+}
+
+// ── Categories ──
+function seedDefaultCategories() {
+  const now = new Date().toISOString();
+  let order = 0;
+  return Object.entries(DEFAULT_CATEGORIES).map(([id, cat]) => ({
+    id, label: cat.label, color: cat.color, light: cat.light, dark: cat.dark,
+    type: id === 'sleep' ? 'system' : 'user',
+    status: 'active', order: order++, createdAt: now, archivedAt: null,
+  }));
+}
+
+function loadCategories() {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return seedDefaultCategories();
+}
+
+function saveCategories() {
+  try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(state.categories)); } catch {}
+}
+
+function rebuildCategories() {
+  CATEGORIES = {};
+  state.categories
+    .filter(c => c.status === 'active')
+    .sort((a, b) => a.order - b.order)
+    .forEach(c => {
+      CATEGORIES[c.id] = { label: c.label, color: c.color, light: c.light, dark: c.dark };
+    });
+}
+
+function getAllCategories() {
+  return [...state.categories].sort((a, b) => a.order - b.order);
+}
+
+function categoryExists(id) {
+  return state.categories.some(c => c.id === id);
+}
+
+function generateColorVariants(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const light = `rgba(${r},${g},${b},0.13)`;
+  const dr = Math.max(0, Math.floor(r * 0.7));
+  const dg = Math.max(0, Math.floor(g * 0.7));
+  const db = Math.max(0, Math.floor(b * 0.7));
+  const dark = `#${dr.toString(16).padStart(2,'0')}${dg.toString(16).padStart(2,'0')}${db.toString(16).padStart(2,'0')}`;
+  return { light, dark };
+}
+
+function toKebabCase(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function uniqueCategoryId(base) {
+  let id = toKebabCase(base);
+  if (!id) id = 'category';
+  let candidate = id, n = 2;
+  while (state.categories.some(c => c.id === candidate)) { candidate = `${id}-${n++}`; }
+  return candidate;
 }
 
 // ── Budget & Balance Calculations ──
@@ -345,6 +419,11 @@ function renderCalList() {
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     calListEl.appendChild(el);
   }
+  const manageLink = document.createElement('button');
+  manageLink.className = 'cal-manage-link';
+  manageLink.textContent = 'Manage Categories';
+  manageLink.addEventListener('click', () => switchPage('categories'));
+  calListEl.appendChild(manageLink);
 }
 
 // ── Date Heading ──
@@ -354,6 +433,7 @@ function updateHeading() {
   if (state.currentPage === 'tasks') { headingEl.textContent = 'Tasks'; return; }
   if (state.currentPage === 'goals') { headingEl.textContent = 'Goals'; return; }
   if (state.currentPage === 'settings') { headingEl.textContent = 'Settings'; return; }
+  if (state.currentPage === 'categories') { headingEl.textContent = 'Manage Categories'; return; }
   switch (state.currentView) {
     case 'day':
       headingEl.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -416,6 +496,7 @@ function renderView() {
     case 'tasks': renderTasksView(); break;
     case 'goals': renderGoalsView(); break;
     case 'settings': renderSettingsView(); break;
+    case 'categories': renderCategoriesView(); break;
     case 'calendar':
     default:
       switch (state.currentView) {
@@ -1073,6 +1154,221 @@ function updateGoal(category, hours) {
   renderView();
 }
 
+// ── Categories View ──
+const COLOR_PRESETS = ['#8b5cf6','#6366f1','#3b82f6','#06b6d4','#10b981','#22c55e','#f59e0b','#f97316','#ef4444','#ec4899','#d946ef','#64748b','#78716c','#0ea5e9','#14b8a6','#a855f7'];
+
+function renderCategoriesView() {
+  const active = getAllCategories().filter(c => c.status === 'active');
+  const archived = getAllCategories().filter(c => c.status === 'archived');
+  const wrap = document.createElement('div');
+  wrap.className = 'categories-view';
+
+  let html = `
+    <div class="cat-mgmt-header">
+      <h2 class="cat-mgmt-title">Categories</h2>
+      <button class="btn btn-primary btn-sm" id="cat-add-btn" ${active.length >= MAX_ACTIVE_CATEGORIES ? 'disabled title="Maximum ' + MAX_ACTIVE_CATEGORIES + ' categories"' : ''}>+ Add Category</button>
+    </div>
+    <p class="cat-mgmt-desc">Customize your life categories. Drag order, rename, or archive categories you no longer need.</p>
+    <div class="cat-mgmt-list" id="cat-mgmt-list">`;
+
+  active.forEach((c, i) => {
+    html += `<div class="cat-mgmt-row" data-id="${c.id}">
+      <div class="cat-mgmt-reorder">
+        <button class="cat-reorder-btn" onclick="moveCategoryUp('${c.id}')" ${i === 0 ? 'disabled' : ''} aria-label="Move up">&#9650;</button>
+        <button class="cat-reorder-btn" onclick="moveCategoryDown('${c.id}')" ${i === active.length - 1 ? 'disabled' : ''} aria-label="Move down">&#9660;</button>
+      </div>
+      <span class="cat-mgmt-dot" style="background:${c.color}"></span>
+      <span class="cat-mgmt-label">${esc(c.label)}</span>
+      ${c.type === 'system' ? '<span class="cat-mgmt-badge">System</span>' : ''}
+      <div class="cat-mgmt-actions">
+        <button class="btn btn-ghost btn-xs" onclick="openCategoryEditor('${c.id}')">Edit</button>
+        ${c.type !== 'system' ? `<button class="btn btn-ghost btn-xs cat-archive-btn" onclick="archiveCategory('${c.id}')">Archive</button>` : ''}
+      </div>
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  if (archived.length > 0) {
+    html += `
+    <div class="cat-mgmt-archived">
+      <button class="cat-archived-toggle" id="cat-archived-toggle" onclick="document.getElementById('cat-archived-list').classList.toggle('hidden');this.classList.toggle('expanded')">
+        Archived (${archived.length})
+      </button>
+      <div class="cat-archived-list hidden" id="cat-archived-list">`;
+    archived.forEach(c => {
+      html += `<div class="cat-mgmt-row archived">
+        <span class="cat-mgmt-dot" style="background:#94a3b8"></span>
+        <span class="cat-mgmt-label">${esc(c.label)}</span>
+        <div class="cat-mgmt-actions">
+          <button class="btn btn-ghost btn-xs" onclick="restoreCategory('${c.id}')" ${active.length >= MAX_ACTIVE_CATEGORIES ? 'disabled title="Max categories reached"' : ''}>Restore</button>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  html += `<div class="cat-editor-area hidden" id="cat-editor-area"></div>`;
+
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+
+  document.getElementById('cat-add-btn').addEventListener('click', () => openCategoryEditor(null));
+}
+
+function openCategoryEditor(editId) {
+  const area = document.getElementById('cat-editor-area');
+  if (!area) return;
+  const existing = editId ? state.categories.find(c => c.id === editId) : null;
+  const title = existing ? 'Edit Category' : 'Add Category';
+  const name = existing ? existing.label : '';
+  const color = existing ? existing.color : COLOR_PRESETS.find(c => !state.categories.some(cat => cat.color === c)) || COLOR_PRESETS[0];
+
+  area.classList.remove('hidden');
+  area.innerHTML = `
+    <div class="cat-editor">
+      <h3 class="cat-editor-title">${title}</h3>
+      <div class="form-group">
+        <label for="cat-edit-name">Name</label>
+        <input type="text" id="cat-edit-name" value="${esc(name)}" maxlength="40" placeholder="e.g. Learning">
+        <span class="error-msg" id="cat-name-error"></span>
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <div class="cat-color-grid" id="cat-color-grid">
+          ${COLOR_PRESETS.map(c => `<button type="button" class="cat-color-swatch ${c === color ? 'selected' : ''}" style="background:${c}" data-color="${c}" aria-label="Color ${c}"></button>`).join('')}
+        </div>
+        <div class="cat-color-custom">
+          <label for="cat-edit-hex">Custom:</label>
+          <input type="text" id="cat-edit-hex" value="${color}" maxlength="7" placeholder="#hex" class="cat-hex-input">
+        </div>
+      </div>
+      <div class="cat-editor-footer">
+        <button class="btn btn-ghost" onclick="closeCategoryEditor()">Cancel</button>
+        <button class="btn btn-primary" id="cat-save-btn">Save</button>
+      </div>
+    </div>
+  `;
+
+  let selectedColor = color;
+  area.querySelectorAll('.cat-color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      area.querySelectorAll('.cat-color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+      selectedColor = sw.dataset.color;
+      document.getElementById('cat-edit-hex').value = selectedColor;
+    });
+  });
+  document.getElementById('cat-edit-hex').addEventListener('input', (e) => {
+    const v = e.target.value;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+      selectedColor = v;
+      area.querySelectorAll('.cat-color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === v));
+    }
+  });
+  document.getElementById('cat-save-btn').addEventListener('click', () => {
+    const nameVal = document.getElementById('cat-edit-name').value.trim();
+    const err = document.getElementById('cat-name-error');
+    if (!nameVal) { err.textContent = 'Name is required'; return; }
+    if (state.categories.some(c => c.label.toLowerCase() === nameVal.toLowerCase() && c.id !== editId && c.status === 'active')) {
+      err.textContent = 'A category with that name already exists'; return;
+    }
+    if (!/^#[0-9a-fA-F]{6}$/.test(selectedColor)) { err.textContent = 'Invalid hex color'; return; }
+    saveCategory(editId, nameVal, selectedColor);
+  });
+  document.getElementById('cat-edit-name').focus();
+}
+
+function closeCategoryEditor() {
+  const area = document.getElementById('cat-editor-area');
+  if (area) area.classList.add('hidden');
+}
+
+function saveCategory(editId, label, color) {
+  const variants = generateColorVariants(color);
+  if (editId) {
+    const cat = state.categories.find(c => c.id === editId);
+    if (cat) {
+      cat.label = label;
+      cat.color = color;
+      cat.light = variants.light;
+      cat.dark = variants.dark;
+    }
+  } else {
+    const id = uniqueCategoryId(label);
+    const maxOrder = Math.max(-1, ...state.categories.map(c => c.order));
+    state.categories.push({
+      id, label, color, light: variants.light, dark: variants.dark,
+      type: 'user', status: 'active', order: maxOrder + 1,
+      createdAt: new Date().toISOString(), archivedAt: null,
+    });
+    state.activeCategories.add(id);
+  }
+  saveCategories();
+  rebuildCategories();
+  renderCalList();
+  renderView();
+}
+
+function archiveCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat || cat.type === 'system') return;
+  const activeCount = state.categories.filter(c => c.status === 'active').length;
+  if (activeCount <= 1) return;
+  if (!confirm(`Archive "${cat.label}"? Events in this category will be preserved but the category won't appear in the picker or goals.`)) return;
+  cat.status = 'archived';
+  cat.archivedAt = new Date().toISOString();
+  state.activeCategories.delete(id);
+  saveCategories();
+  rebuildCategories();
+  renderCalList();
+  renderView();
+}
+
+function restoreCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  const activeCount = state.categories.filter(c => c.status === 'active').length;
+  if (activeCount >= MAX_ACTIVE_CATEGORIES) { alert(`Maximum ${MAX_ACTIVE_CATEGORIES} active categories.`); return; }
+  cat.status = 'active';
+  cat.archivedAt = null;
+  state.activeCategories.add(id);
+  saveCategories();
+  rebuildCategories();
+  renderCalList();
+  renderView();
+}
+
+function moveCategoryUp(id) {
+  const active = getAllCategories().filter(c => c.status === 'active');
+  const idx = active.findIndex(c => c.id === id);
+  if (idx <= 0) return;
+  const prev = active[idx - 1];
+  const curr = active[idx];
+  const tmpOrder = curr.order;
+  curr.order = prev.order;
+  prev.order = tmpOrder;
+  saveCategories();
+  rebuildCategories();
+  renderCalList();
+  renderView();
+}
+
+function moveCategoryDown(id) {
+  const active = getAllCategories().filter(c => c.status === 'active');
+  const idx = active.findIndex(c => c.id === id);
+  if (idx < 0 || idx >= active.length - 1) return;
+  const next = active[idx + 1];
+  const curr = active[idx];
+  const tmpOrder = curr.order;
+  curr.order = next.order;
+  next.order = tmpOrder;
+  saveCategories();
+  rebuildCategories();
+  renderCalList();
+  renderView();
+}
+
 // ── Settings View ──
 function renderSettingsView() {
   const wrap = document.createElement('div');
@@ -1188,7 +1484,12 @@ function renderCatPicker() {
   catPicker.innerHTML = '';
   catPicker.setAttribute('role', 'radiogroup');
   catPicker.setAttribute('aria-label', 'Event category');
-  for (const [key, cat] of Object.entries(CATEGORIES)) {
+  const entries = Object.entries(CATEGORIES);
+  if (state.selectedCategory && !CATEGORIES[state.selectedCategory]) {
+    const arc = state.categories.find(c => c.id === state.selectedCategory);
+    if (arc) entries.push([arc.id, { label: arc.label + ' (archived)', color: '#94a3b8', light: arc.light, dark: '#64748b' }]);
+  }
+  for (const [key, cat] of entries) {
     const el = document.createElement('div');
     const isSel = state.selectedCategory === key;
     el.className = 'cat-option' + (isSel ? ' selected' : '');
@@ -1343,6 +1644,7 @@ function buildAIContext(action, targetDate, command) {
     balanceScore: balanceScore !== null ? balanceScore : undefined,
     budgetSummary: budget.categoryTotals,
     command: command || undefined,
+    categories: Object.entries(CATEGORIES).map(([id, c]) => ({ id, label: c.label })),
   };
 }
 
@@ -1829,9 +2131,12 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Init ──
+state.categories = loadCategories();
+rebuildCategories();
 state.events = loadEvents();
 state.goals = loadGoals();
 state.preferences = loadPreferences();
+state.activeCategories = new Set(Object.keys(CATEGORIES));
 loadCommandHistory();
 state.currentPage = state.preferences.startPage || 'dashboard';
 document.querySelectorAll('.view-switcher button').forEach(b => b.classList.toggle('active', b.dataset.view === state.currentView));
