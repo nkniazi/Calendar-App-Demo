@@ -46,7 +46,7 @@ LifeBalance Planner is a digital planner that runs in your web browser — no ap
 - Day, 3-day, week, month, agenda, and year views
 - Create events with categories, times, and recurrence
 - Task management with priorities and subtasks
-- Drag-friendly time blocking
+- Color-coded time blocking
 
 **Life Balance System**
 - 7 customizable life categories
@@ -85,15 +85,17 @@ LifeBalance Planner is a digital planner that runs in your web browser — no ap
 
 ### How It Works
 
-1. Download and unzip
-2. Open LifeBalance-Planner.html in Chrome, Edge, or Firefox
+1. Download the files
+2. Open LifeBalance-Planner.html in Chrome or Edge
 3. Start adding your events, tasks, and goals
 4. Your data saves automatically in your browser
 5. Export backups from Settings (recommended weekly)
 
 ### Requirements
-- Any modern web browser (Chrome, Edge, Firefox, Safari)
-- Works on desktop, laptop, and tablet
+- Google Chrome or Microsoft Edge (tested and recommended)
+- Also works in Firefox and Safari
+- Windows or Mac desktop/laptop
+- For iPad: use the included GoodNotes Companion PDF
 - No internet connection required after download
 - No account or subscription needed
 
@@ -122,7 +124,7 @@ A: No. After downloading, everything runs offline in your browser.
 A: Your data stays in your browser's local storage on your device. We recommend exporting a backup weekly from Settings.
 
 **Q: Can I use this on my iPad?**
-A: Yes! Open in Safari and use "Add to Home Screen" for an app-like experience. Works best on tablets and desktops.
+A: The included GoodNotes Companion PDF is designed for iPad with hyperlinked tabs for easy navigation. The HTML planner is designed for desktop browsers (Chrome, Edge) on Windows and Mac.
 
 **Q: Does this work with GoodNotes/Notability?**
 A: The companion PDF planner works great in GoodNotes and Notability. The main HTML planner runs in a web browser.

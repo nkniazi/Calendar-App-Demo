@@ -27,8 +27,9 @@ css = css.replace(/font-family:\s*Inter[^;]*/g, "font-family: -apple-system, Bli
 html = html.replace(/<title>LifeBalance<\/title>/, '<title>LifeBalance Planner</title>');
 
 // Inline CSS and JS
-html = html.replace(/<link\s+rel="stylesheet"\s+href="style\.css"\s*>/, `<style>\n${css}\n</style>`);
-html = html.replace(/<script\s+src="app\.js"\s*><\/script>/, `<script>\n${js}\n</script>`);
+// Function replacers: a string replacement would treat "$$", "$&" etc. in the code as special patterns
+html = html.replace(/<link\s+rel="stylesheet"\s+href="style\.css"\s*>/, () => `<style>\n${css}\n</style>`);
+html = html.replace(/<script\s+src="app\.js"\s*><\/script>/, () => `<script>\n${js}\n</script>`);
 
 // Remove skip link href (still functional, no network)
 // Nothing to change — it's an internal anchor

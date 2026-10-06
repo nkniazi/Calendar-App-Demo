@@ -1,20 +1,28 @@
 # Etsy Edition Verification Report
 
 **Date:** 2026-10-06  
-**Version:** etsy-v1.0  
+**Version:** etsy-v1.1  
 **Build:** `npm run build:etsy && npm run build:pdfs && npm run build:templates`
 
 ## Deliverables
 
 | # | File | Size | Status |
 |---|------|------|--------|
-| 1 | LifeBalance-Planner.html | 261 KB | PASS |
-| 2 | Start-Here-Guide.pdf | 6.0 KB | PASS |
-| 3 | GoodNotes-Companion-Planner.pdf | 9.8 KB | PASS |
+| 1 | LifeBalance-Planner.html | 262 KB | PASS |
+| 2 | Start-Here-Guide.pdf | 343 KB (with screenshots) | PASS |
+| 3 | GoodNotes-Companion-Planner.pdf | 52 KB (26 pages, 587 links) | PASS |
 | 4 | AI-Prompt-Pack.pdf | 9.0 KB | PASS |
 | 5 | Starter-Templates.zip | 5.1 KB | PASS |
 
-**Total:** 5 files, ~300 KB (limit: 5 files, 20 MB) - PASS
+**Total:** 5 files, ~672 KB (limit: 5 files, 20 MB) - PASS
+
+## v1.1 Changes
+
+1. **GoodNotes Companion PDF rebuilt** — landscape 1366x1024, 26 pages, 587 hyperlinked annotations, side tabs on every content page, 2 cover colors (light/dark), undated 12 monthly pages, weekly + daily templates
+2. **Start-Here-Guide updated** — 8 pages with embedded Playwright screenshots (dashboard, calendar, goals, settings/backup, AI panel, dark mode)
+3. **Etsy listing images generated** — 10 marketing images at 3000x2250 px + demo video (.webm)
+4. **ETSY_LISTING.md fixed** — removed "drag-friendly", removed iPad HTML claim (iPad directed to GoodNotes PDF), removed "unzip" step, narrowed browser claims to tested (Chrome, Edge)
+5. **Buyer test passed** — 12/12 automated tests pass from a clean folder
 
 ## Security Checks
 
@@ -81,12 +89,37 @@
 - [x] localStorage persistence
 - [x] No network requests in Etsy edition code path
 
-## Test Results
+## Buyer Test Results (Automated, Playwright)
 
-- **Total tests:** 193
-- **Passed:** 193
+12/12 tests passed from a clean folder (simulating buyer download):
+
+| Test | Result |
+|------|--------|
+| Opens in browser with title | PASS |
+| Navigation loads (12 items) | PASS |
+| Data saved to localStorage | PASS |
+| Data persists after reopen | PASS |
+| Export backup created | PASS |
+| Data cleared before import test | PASS |
+| Import backup restored | PASS |
+| Template UI present | PASS |
+| All 12 pages render | PASS |
+| AI panel opens | PASS |
+| Dark mode toggles on | PASS |
+| LB_EDITION = "etsy" | PASS |
+
+## Unit Test Results
+
+- **Total tests:** 200
+- **Passed:** 200
 - **Failed:** 0
-- **Test files:** 10 (including etsy.test.js with 28 Etsy-specific tests)
+- **Test files:** 11 (including etsy.test.js with 28 Etsy-specific tests, goodnotes-pdf.test.js with 7 PDF tests)
+
+### GoodNotes PDF Test Report
+- Pages: 26
+- Links: 587
+- Size: 52.0 KB
+- All link annotations point to valid page references
 
 ### Etsy Test Coverage
 - Brain Dump: 4 tests
@@ -107,14 +140,19 @@ The `build-etsy.js` script performs automated security scanning:
 5. Fails the build if any unguarded security issue is found
 
 ## Companion Files
-- **Start-Here-Guide.pdf:** 6 pages - Getting Started, Browser Support, Backup & Restore, Troubleshooting, Features Overview
-- **GoodNotes-Companion-Planner.pdf:** 11 pages - Index, Monthly Overview, Weekly Time-Blocking, Daily Planner, 24-Hour Life Budget, Habit Tracker, Balance Wheel, Weekly Review, Brain Dump, Budget Tracker, Meal Planner
+- **Start-Here-Guide.pdf:** 8 pages with embedded screenshots - Getting Started, First Setup, Browser Support, Backup & Restore, Using Copy for AI, Troubleshooting, Features Overview
+- **GoodNotes-Companion-Planner.pdf:** 26 pages landscape 1366x1024 - 2 covers (light/dark), Index, Year Overview, 12 Monthly pages, Weekly Time-Blocking, Daily Planner, 24-Hour Budget, Habit Tracker, Balance Wheel, Weekly Review, Brain Dump, Budget Tracker, Meal Planner, Notes. 587 hyperlinked annotations with side tabs on every content page.
 - **AI-Prompt-Pack.pdf:** 8 pages - 33 prompts across 7 categories (Scheduling, Habits, Goals, Productivity, Wellness, Faith & Relationships, Financial)
 - **Starter-Templates.zip:** 5 JSON templates (ADHD-Friendly, Student, Working Parent, Faith & Prayer, Fitness)
+
+## Marketing Assets
+- **Etsy listing images:** 10 images at 3000x2250 px in `marketing/etsy-images/`
+- **Demo video:** `marketing/etsy-images/demo-video.webm` (1.49 MB)
+- **Screenshots:** 15 screenshots at 1280x900 in `dist/etsy/screenshots/`
 
 ## Web Edition Regression
 The web edition (`LB_EDITION = 'web'`) is unaffected:
 - Edition flag defaults to `'web'` when `__LB_EDITION__` is not defined
 - All Etsy-specific UI (backup button, template browser) is gated by edition check
 - AI planner still calls the Netlify function in web edition
-- All 193 tests pass against the web edition codebase
+- All 200 tests pass against the web edition codebase

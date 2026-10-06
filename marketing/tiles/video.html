@@ -1,0 +1,107 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>LifeBalance Etsy video</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Caveat:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#16163a;--muted:#5b5f7a;--indigo:#5b5bf6;--sun:#ffe066;--red:#ef4444;--green:#10b981}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:1080px;overflow:hidden;background:#000;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink)}
+.scene{position:absolute;inset:0;overflow:hidden}
+.a{position:absolute;will-change:transform,opacity}
+img{display:block;width:100%}
+.h{font-weight:800;font-size:84px;line-height:1.04;letter-spacing:-2.5px;text-align:center;left:0;right:0}
+.hl{background:linear-gradient(transparent 58%,var(--sun) 58%,var(--sun) 92%,transparent 92%);padding:0 6px}
+.card{border-radius:22px;background:#fff;overflow:hidden;box-shadow:0 30px 80px rgba(20,20,60,.30)}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:16px 28px;border-radius:999px;background:#fff;font-weight:800;font-size:32px;box-shadow:0 12px 30px rgba(20,20,60,.18);white-space:nowrap}
+.tag{font-weight:800;font-size:36px;padding:14px 26px;border-radius:16px;color:#fff;box-shadow:0 12px 30px rgba(0,0,0,.25)}
+.laptop .screen{background:#0e0e1c;border-radius:24px 24px 6px 6px;padding:14px 14px 16px;box-shadow:0 40px 90px rgba(20,20,60,.35)}
+.laptop .screen img{border-radius:6px}
+.laptop .base{height:24px;margin:0 -60px;background:linear-gradient(#e6e7ee,#b9bcc9);border-radius:0 0 30px 30px}
+.note{font-family:'Caveat',cursive;font-weight:700;font-size:58px;color:var(--indigo)}
+</style></head>
+<body>
+
+<!-- S1: hook -->
+<div class="scene" data-in="0" data-out="3.3" data-anim="fade" style="background:radial-gradient(1100px 700px at 50% 0%,#2a2a6a 0%,#16163a 65%)">
+  <div class="a h" data-in="0.15" data-anim="up" style="top:110px;color:#fff">Is your day<br><span style="color:var(--sun)">actually possible?</span></div>
+  <div class="a" data-in="0.9" data-anim="pop" style="left:420px;top:430px;width:600px"><div class="card"><img src="../raw/el-budget-over.png"></div></div>
+  <div class="a tag" data-in="1.6" data-anim="pop" style="left:470px;top:395px;background:var(--red)">✕ Overbooked by 11h 15m</div>
+  <div class="a note" data-in="2.1" data-anim="up" style="left:0;right:0;top:900px;text-align:center;color:#c9cbf2">most planners never tell you…</div>
+</div>
+
+<!-- S2: LifeBalance does the math -->
+<div class="scene" data-in="3.0" data-out="6.5" data-anim="fade" style="background:linear-gradient(135deg,#fbf7f1,#e9e6ff)">
+  <div class="a h" data-in="3.15" data-anim="up" style="top:70px">LifeBalance <span class="hl">does the math</span></div>
+  <div class="a laptop" data-in="3.4" data-anim="up" style="left:250px;top:250px;width:940px"><div class="screen"><img src="../raw/dashboard.png"></div><div class="base"></div></div>
+  <div class="a" data-in="4.2" data-anim="pop" style="left:60px;top:640px;width:400px"><div class="card"><img src="../raw/el-budget.png"></div></div>
+  <div class="a" data-in="4.8" data-anim="pop" style="left:1000px;top:600px;width:390px"><div class="card"><img src="../raw/el-score.png"></div></div>
+  <div class="a tag" data-in="5.2" data-anim="pop" style="left:90px;top:600px;background:var(--green)">✓ 8h 45m free</div>
+</div>
+
+<!-- S3: habits -->
+<div class="scene" data-in="6.3" data-out="8.9" data-anim="fade" style="background:linear-gradient(150deg,#fff3ea,#ffe2cf)">
+  <div class="a h" data-in="6.45" data-anim="up" style="top:90px">Habits that <span class="hl">track themselves</span></div>
+  <div class="a" data-in="6.8" data-anim="up" style="left:140px;top:330px;width:1160px"><div class="card"><img src="../raw/el-habits-today.png"></div></div>
+  <div class="a pill" data-in="7.5" data-anim="pop" style="left:170px;top:850px">🔥 15-day streak</div>
+  <div class="a pill" data-in="7.8" data-anim="pop" style="left:560px;top:850px;background:var(--indigo);color:#fff">💛 Skip a day — streak safe</div>
+</div>
+
+<!-- S4: ADHD -->
+<div class="scene" data-in="8.7" data-out="11.3" data-anim="fade" style="background:linear-gradient(160deg,#f3f1ff,#e2deff)">
+  <div class="a h" data-in="8.85" data-anim="up" style="top:80px">Made for <span class="hl">busy brains</span></div>
+  <div class="a" data-in="9.1" data-anim="left" style="left:80px;top:270px;width:420px"><div class="card" style="height:560px"><img src="../raw/el-braindump.png"></div><div class="pill" style="margin-top:22px">💭 Brain Dump</div></div>
+  <div class="a" data-in="9.45" data-anim="up" style="left:530px;top:270px;width:420px"><div class="card" style="height:560px"><img src="../raw/el-focus.png" style="width:600px;margin-left:-90px;margin-top:-20px"></div><div class="pill" style="margin-top:22px">⏱ Focus Timer</div></div>
+  <div class="a" data-in="9.8" data-anim="right" style="left:980px;top:270px;width:380px"><div class="card"><img src="../raw/el-energy.png"></div><div class="pill" style="margin-top:22px">⚡ Energy &amp; Mood</div></div>
+  <div class="a pill" data-in="10.2" data-anim="pop" style="left:980px;top:560px">🎯 One Thing Now</div>
+</div>
+
+<!-- S5: all-in-one + themes -->
+<div class="scene" data-in="11.1" data-out="13.3" data-anim="fade" style="background:#16163a">
+  <div class="a h" data-in="11.25" data-anim="up" style="top:70px;color:#fff">Budget · Meals · Journal · <span style="color:var(--sun)">Themes</span></div>
+  <div class="a" data-in="11.5" data-anim="pop" style="left:70px;top:280px;width:420px"><div class="card" style="height:520px"><img src="../raw/el-money.png"></div></div>
+  <div class="a" data-in="11.8" data-anim="pop" style="left:520px;top:280px;width:450px"><div class="card"><img src="../raw/el-grocery.png"></div></div>
+  <div class="a" data-in="12.1" data-anim="pop" style="left:1000px;top:280px;width:380px"><div class="card"><img src="../raw/theme-blush.png"></div></div>
+  <div class="a" data-in="12.3" data-anim="pop" style="left:1000px;top:540px;width:380px"><div class="card"><img src="../raw/dark-dashboard.png"></div></div>
+  <div class="a" data-in="12.5" data-anim="pop" style="left:520px;top:560px;width:450px"><div class="card"><img src="../raw/theme-sage.png"></div></div>
+</div>
+
+<!-- S6: end card -->
+<div class="scene" data-in="13.1" data-out="99" data-anim="fade" style="background:linear-gradient(135deg,#fbf7f1 0%,#efecff 60%,#e3e0ff 100%)">
+  <div class="a" data-in="13.25" data-anim="pop" style="left:0;right:0;top:170px;display:flex;justify-content:center;align-items:center;gap:22px">
+    <div style="width:96px;height:96px;border-radius:28px;background:var(--indigo);color:#fff;display:grid;place-items:center;font-size:54px;font-weight:800">◷</div>
+    <div style="font-weight:800;font-size:76px;letter-spacing:-2px">LifeBalance Planner</div>
+  </div>
+  <div class="a h" data-in="13.45" data-anim="up" style="top:350px;font-size:70px">The planner that tells you if your<br>day is <span class="hl">actually possible</span></div>
+  <div class="a" data-in="13.75" data-anim="up" style="left:0;right:0;top:680px;display:flex;justify-content:center;gap:18px">
+    <span class="pill">♾ Undated</span><span class="pill" style="background:var(--ink);color:#fff">💻 Windows &amp; Mac</span><span class="pill">📱 iPad PDF</span>
+  </div>
+  <div class="a note" data-in="14.0" data-anim="up" style="left:0;right:0;top:830px;text-align:center">instant download ✨</div>
+</div>
+
+<script>
+const ease = p => 1 - Math.pow(1 - p, 3);
+const back = p => { const c = 1.6; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
+const clamp = v => Math.max(0, Math.min(1, v));
+const els = [...document.querySelectorAll('[data-in]')];
+window.renderAt = t => {
+  for (const el of els) {
+    const tin = +el.dataset.in, tout = el.dataset.out ? +el.dataset.out : null, anim = el.dataset.anim;
+    const dur = el.classList.contains('scene') ? 0.3 : 0.55;
+    const p = clamp((t - tin) / dur);
+    let o = ease(p), tf = '';
+    if (anim === 'up') tf = `translateY(${(1 - ease(p)) * 60}px)`;
+    else if (anim === 'left') tf = `translateX(${(1 - ease(p)) * -120}px)`;
+    else if (anim === 'right') tf = `translateX(${(1 - ease(p)) * 120}px)`;
+    else if (anim === 'pop') tf = `scale(${0.6 + 0.4 * back(p)})`;
+    if (el.classList.contains('scene')) {
+      if (tout !== null) o *= 1 - clamp((t - (tout - 0.3)) / 0.3);
+      const life = clamp((t - tin) / Math.max(0.1, (tout ?? tin + 3) - tin));
+      tf = `scale(${1 + 0.035 * life})`; // slow push-in
+    }
+    el.style.opacity = o;
+    el.style.transform = tf;
+  }
+};
+renderAt(0);
+</script>
+</body></html>
