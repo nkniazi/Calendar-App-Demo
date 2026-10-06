@@ -1,6 +1,6 @@
 {
   "name": "lifebalance-ai",
-  "version": "5.0.0",
+  "version": "7.0.0",
   "private": true,
   "description": "LifeBalance AI — Personal Time Manager with Claude AI",
   "scripts": {

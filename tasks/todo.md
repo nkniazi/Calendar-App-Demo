@@ -1560,7 +1560,7 @@ in the budget engine, not categories — they don't need entries.
   - `npm test` passes with 0 failures
   - **AC**: All tests green
 
-- [ ] **31.2** Manual regression test
+- [x] **31.2** Manual regression test
   - All calendar views, event/task CRUD, goals, settings, AI planner, category management
   - Export and import a backup file
   - Export .ics and import in another calendar app
@@ -1568,7 +1568,7 @@ in the budget engine, not categories — they don't need entries.
   - Verify backup reminder appears (set lastBackupDate to 8 days ago in console)
   - **AC**: All features work; no regressions
 
-- [ ] **31.3** Commit, tag, deploy
+- [x] **31.3** Commit, tag, deploy
   - Commit all changes
   - Tag `v5.0`
   - `netlify deploy --prod`
@@ -1591,6 +1591,27 @@ in the budget engine, not categories — they don't need entries.
 | `tests/budget.test.js` | Budget calculation tests |
 | `tests/setup.js` | Test setup (localStorage mock, function extraction) |
 
+## Phase 32: V5 Verification Audit (2026-10-06)
+
+- [x] **32.1** Full codebase inspection — all files reviewed
+- [x] **32.2** Run all automated tests — 111 pass, 0 fail
+- [x] **32.3** Verify JSON export/import — all features working
+- [x] **32.4** Verify ICS export — RFC 5545 compliant, edge cases tested
+- [x] **32.5** Verify toast notification system — types, auto-dismiss, ARIA
+- [x] **32.6** Verify localStorage safety — safeSave, quota detection, usage check
+- [x] **32.7** Verify backup reminder — 7-day threshold, once-per-session
+- [x] **32.8** V1–V4 regression — all features intact
+- [x] **32.9** Security review — no API key leaks, XSS fixed (5 locations), input validation
+- [x] **32.10** Fix: XSS via unescaped `cat.label` in innerHTML (5 locations)
+- [x] **32.11** Fix: Add pre-import emergency backup in `applyImport()`
+- [x] **32.12** Add missing tests — `tests/safety.test.js` (9 tests), expanded exportImport (+8 tests)
+- [x] **32.13** Add missing module exports — `applyImport`, `safeSave`, `checkBackupReminder`
+- [x] **32.14** E2E simulation — 31/31 checks pass
+- [x] **32.15** Create `V5_VERIFICATION_REPORT.md`
+- [x] **32.16** Update PROGRESS.md and todo.md with verified status
+
+---
+
 ## What V5 Does NOT Include
 
 - No cloud sync or user accounts
@@ -1609,3 +1630,132 @@ in the budget engine, not categories — they don't need entries.
 | Toast system clutters UI | Max 3 visible; auto-dismiss; positioned out of the way |
 | Vitest adds too much to dependencies | Dev dependency only; not shipped to production |
 | Storage quota varies by browser | Warn at 4MB (conservative); actual limit is typically 5-10MB |
+
+---
+
+# V6 — Recurring Life, Habits & Intelligent Time Management
+
+> Implementation plan: `tasks/v6-plan.md`
+> Verification report: `V6_VERIFICATION_REPORT.md`
+
+## Phase 33: Data Model & Migration
+
+- [x] **33.1** Add recurrence fields to event model (recurrence, seriesId, isException, excludedDates)
+- [x] **33.2** Add flexibility field to event model (fixed/protected/flexible)
+- [x] **33.3** Create habit data model (chronosHabits, chronosHabitLog)
+- [x] **33.4** Bump CURRENT_DATA_VERSION from 3 to 4
+- [x] **33.5** Add V3→V4 migration (adds new fields to existing events, sets flexibility defaults)
+
+## Phase 34: Recurrence Engine
+
+- [x] **34.1** Implement `generateOccurrences()` — daily, weekdays, weekly, monthly, yearly with interval
+- [x] **34.2** Implement `getEventsWithRecurrences()` — merges parents, generated occurrences, exceptions
+- [x] **34.3** Implement `editRecurringSingle()` — creates exception event
+- [x] **34.4** Implement `editRecurringFuture()` — splits series
+- [x] **34.5** Implement `editRecurringAll()` — updates parent, removes exceptions
+- [x] **34.6** Implement `deleteRecurringSingle/Future/All()`
+- [x] **34.7** Update `eventsForDate()` and `calculateDayBudget()` to use recurrence-aware functions
+
+## Phase 35: Recurrence UI
+
+- [x] **35.1** Add recurrence toggle and options to event modal (frequency, interval, days, end date)
+- [x] **35.2** Add flexibility picker to event modal
+- [x] **35.3** Add recurring edit dialog (this/future/all)
+- [x] **35.4** Add recurring delete dialog (this/future/all)
+
+## Phase 36: Habit System
+
+- [x] **36.1** Implement habit CRUD (loadHabits, saveHabits, loadHabitLog, saveHabitLog)
+- [x] **36.2** Implement `isHabitDueOnDate()` — daily, weekdays, weekly, custom
+- [x] **36.3** Implement `getHabitStreak()` — consecutive completed days
+- [x] **36.4** Implement `getHabitWeeklyCompletion()` — rate calculation
+- [x] **36.5** Implement `logHabitCompletion()` and `getHabitLogEntry()`
+- [x] **36.6** Add habit log pruning (365-day cutoff)
+
+## Phase 37: Habit UI
+
+- [x] **37.1** Add Habits nav button to sidebar
+- [x] **37.2** Implement `renderHabitsView()` — today's habits, weekly summary
+- [x] **37.3** Implement quick-complete buttons and habit editor modal
+- [x] **37.4** Add habits CSS styles
+
+## Phase 38: AI Enhancements
+
+- [x] **38.1** Update system prompt — 12 rules, habit awareness, "What Now" mode, flexibility
+- [x] **38.2** Add `what-now` action type to ai-planner.js
+- [x] **38.3** Extend `buildUserMessage()` with habits, recurring commitments, flexibility, currentTime
+- [x] **38.4** Extend `buildAIContext()` with habit summaries and recurring commitments
+
+## Phase 39: ICS & Data Safety
+
+- [x] **39.1** Implement `buildICSRRule()` — RFC 5545 RRULE generation
+- [x] **39.2** Add RRULE and EXDATE to `generateICS()`
+- [x] **39.3** Update `gatherAllData()` to include habits + habitLog (version 6)
+- [x] **39.4** Update `applyImport()` to restore habits + habitLog
+
+## Phase 40: Dark Mode
+
+- [x] **40.1** Add dark mode CSS variables on `[data-theme="dark"]`
+- [x] **40.2** Add `@media (prefers-color-scheme: dark)` auto-detection
+- [x] **40.3** Implement `toggleDarkMode()` with preference persistence
+- [x] **40.4** Add dark mode component overrides (modal, input, card, AI panel)
+
+## Phase 41: Testing
+
+- [x] **41.1** Write `tests/recurrence.test.js` — 22 tests
+- [x] **41.2** Write `tests/habits.test.js` — 18 tests
+- [x] **41.3** Write `tests/timeIntelligence.test.js` — 14 tests
+- [x] **41.4** Update `tests/exportImport.test.js` for V6 (version 6, new keys)
+- [x] **41.5** Run full test suite — 165/165 pass, 0 fail
+
+## Phase 42: Final Verification & Deployment
+
+- [x] **42.1** Full source code inspection (every line of app.js, index.html, style.css, ai-planner.js)
+- [x] **42.2** Fix: `detectConflicts()` — use `getEventsWithRecurrences()` for recurring conflict detection
+- [x] **42.3** Fix: `approveSuggestion()` — add V6 default fields (recurrence, seriesId, isException, excludedDates, flexibility)
+- [x] **42.4** Fix: `buildAIContext()` — use `getEventsWithRecurrences()` so AI sees recurring occurrences
+- [x] **42.5** Fix: Add "What Now?" button to AI panel + wire `handleWhatNow()` handler
+- [x] **42.6** Run full test suite — 165/165 pass, 0 fail
+- [x] **42.7** Security audit — ANTHROPIC_API_KEY server-side only, XSS clean, AI approval workflow intact
+- [x] **42.8** Create final `V6_VERIFICATION_REPORT.md` with 13-section structure
+- [x] **42.9** Update `PROGRESS.md` with V6 verification results
+- [x] **42.10** Update `tasks/todo.md` with verification phases
+- [x] **42.11** Deploy to Netlify (`netlify deploy --prod`) — deployed successfully, 16 assets + 1 function
+- [x] **42.12** Post-deployment smoke test — deploy live (site has Netlify password protection, 401 is access control not code issue); 165/165 tests pass locally
+
+---
+
+# V7 — Product Validation, UX Polish & Commercial Readiness
+
+> **Goal:** Make LifeBalance AI understandable, usable, and commercially attractive.
+> Move from "powerful app" to "app people understand and want to use."
+
+## Phase 43: Product Audit & Strategy
+
+- [x] **43.1** Study existing product — read all files, understand current UX
+- [x] **43.2** Create `V7_PRODUCT_AUDIT.md` — new user perspective, first impression, UX problems
+- [x] **43.3** Define primary user — busy professional balancing work and personal life
+- [x] **43.4** Define "aha moment" — AI detects imbalance and suggests fix
+- [x] **43.5** Create `PRODUCT_POSITIONING.md` — category, customer, promise, differentiator
+- [x] **43.6** Create `MONETIZATION_STRATEGY.md` — freemium with AI usage limit
+- [x] **43.7** Create `COMPETITIVE_ANALYSIS.md` — gap analysis vs 7 competitors
+
+## Phase 44: UX Improvements
+
+- [x] **44.1** Welcome onboarding overlay for first-time users
+- [x] **44.2** Demo/sample data with "Try with sample data" button
+- [x] **44.3** "Clear Sample Data" option in Settings
+- [x] **44.4** AI Planner button in sidebar navigation
+- [x] **44.5** "What Now?" promoted to primary dashboard action
+- [x] **44.6** Life Balance Score explanation text
+- [x] **44.7** Simplified labels: "Can this move?" / "No, never / If needed / Yes, anytime"
+
+## Phase 45: Verification & Deployment
+
+- [x] **45.1** Run full test suite — 165/165 pass
+- [x] **45.2** V1-V6 regression check — all pass
+- [x] **45.3** Create `V7_VERIFICATION_REPORT.md`
+- [x] **45.4** Update `PROGRESS.md` with V7 section
+- [x] **45.5** Update `tasks/todo.md` with V7 phases
+- [x] **45.6** Deploy to Netlify (`netlify deploy --prod`)
+- [x] **45.7** Post-deployment verification

@@ -281,33 +281,267 @@ Category (stored in chronosCategories):
 }
 ```
 
-## Next Steps — V5
+## V5: Data Safety & Reliability (Complete)
 
-V5 should focus on **Recurring Events & Habits** — the most-requested missing feature that unlocks real daily-use value.
+### What Changed
 
-### V5.0 — Recurring Events & Habits
-- Recurrence rules: daily, weekly, biweekly, monthly, custom (e.g. "Mon/Wed/Fri")
-- Recurrence stored as a rule on the parent event; individual occurrences generated at render time
-- Edit/delete: "this occurrence", "this and future", "all occurrences"
-- Habits: recurring tasks with streak tracking (days completed in a row)
-- Dashboard habit widget showing current streaks and completion rate
-- AI planner aware of recurrence — avoids conflicts with recurring events
+**Export / Import (Settings → Data Management):**
+- "Export Backup" — downloads all localStorage data as `lifebalance-backup-YYYY-MM-DD.json`
+  - Includes: events, goals, preferences, categories, AI command history
+  - Payload wrapped with `version: 5` and `exportedAt` timestamp
+- "Import Backup" — file picker with validation (valid JSON, has version, has events array)
+  - Preview summary before replacing: shows event/task/goal/category counts vs current data
+  - "Replace All" overwrites everything and reloads app state
+  - Invalid files show inline error, no data touched
+- "Export Calendar (.ics)" — RFC 5545 iCalendar export
+  - VCALENDAR wrapper with VEVENT entries (DTSTART, DTEND, SUMMARY, DESCRIPTION, CATEGORIES)
+  - All-day events use DATE format; timed events use DATETIME
+  - Tasks skipped (not calendar events)
+  - Compatible with Google Calendar and Outlook
 
-### V5.1 — Data Export/Import
-- Export all data (events, categories, goals, preferences) as JSON
-- Import JSON with merge strategy (skip duplicates, overwrite, or append)
-- Useful for backup, device transfer, and sharing templates
+**Automated Tests (Vitest):**
+- Test runner: Vitest (`npm test` / `vitest run`)
+- Functions exported from `app.js` behind a `typeof module` guard (browser-safe)
+- Test files in `tests/`:
+  - `setup.js` — localStorage mock, function extraction from app.js
+  - `dateUtils.test.js` — `pad()`, `fmtDate()`, `dateStr()`, `todayStr()`, `timeToMin()`, `getMonday()`, `addDays()`, `daysInMonth()`, `formatHour()`
+  - `categories.test.js` — `seedDefaultCategories()`, `rebuildCategories()`, `generateColorVariants()`, `categoryExists()`
+  - `migration.test.js` — V1→V2 category migration, V2→V3 category seeding, idempotency, unknown category fallback
+  - `exportImport.test.js` — JSON export shape, round-trip fidelity, import validation, .ics export format
+  - `budget.test.js` — `calculateDayBudget()` with 0/1/many events, all-day sleep, overbooking detection
 
-### V5.2 — Dark Mode
-- CSS custom property theming (light/dark)
-- System preference detection via `prefers-color-scheme`
-- Manual toggle in Settings, persisted in localStorage
-- All category colors, charts, and AI panel must adapt
+**Safety Net:**
+- localStorage quota detection: `setItem` wrapped in try/catch; `QuotaExceededError` triggers a warning toast
+- Storage usage check on app load: warns if >4MB used (of ~5MB typical browser limit)
+- Backup reminder: if `lastBackupDate` in preferences is >7 days ago (or missing), shows a one-time reminder toast with "Export Now" action; exporting resets the timer
+- Toast notification system: `showToast(message, type, actionLabel, actionCallback)`
+  - Types: `info`, `warning`, `error`, `success`
+  - Auto-dismiss: 6s default, 10s for warning/error
+  - Stackable (up to 3 visible), positioned bottom-right
+  - Accessible: `role="status"`, `aria-live="polite"`
 
-### Future Ideas (Unprioritized)
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `app.js` | Export/import functions, .ics generator, toast system, storage quota detection, backup reminder, testable function exports |
+| `index.html` | Toast container div |
+| `style.css` | Toast styles, data management section styles |
+| `package.json` | Added `vitest` dev dependency, `"test": "vitest run"` script |
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `tests/setup.js` | Test setup — localStorage mock, function extraction |
+| `tests/dateUtils.test.js` | Date/time utility tests |
+| `tests/categories.test.js` | Category CRUD and color variant tests |
+| `tests/migration.test.js` | Data migration tests (V1→V2→V3) |
+| `tests/exportImport.test.js` | Export/import round-trip and validation tests |
+| `tests/budget.test.js` | Budget calculation tests |
+
+### Deployment
+
+- **V5**: Deployed 2026-10-05
+- **Production URL**: https://timely-choux-b3d5f8.netlify.app
+
+## V5 Verification Audit (2026-10-06)
+
+Full verification report: `V5_VERIFICATION_REPORT.md`
+
+### Results
+
+- **111 Vitest tests**: all pass (6 test files)
+- **31 E2E simulation checks**: all pass
+- **V1–V4 regression**: all pass (code inspection + unit tests)
+- **Security**: clean (no API key leaks, XSS fixed, import validation, AI approval workflow intact)
+
+### Issues Found & Fixed During Verification
+
+1. **XSS via unescaped category labels** (Medium) — `cat.label` used in innerHTML without `esc()` in 5 locations. Fixed.
+2. **No pre-import emergency backup** (Medium) — `applyImport()` now saves `chronosPreImportBackup` before overwriting. Fixed.
+3. **Missing safety test coverage** (Low) — Added `tests/safety.test.js` (9 tests) and 8 new tests in `exportImport.test.js`. Fixed.
+4. **Missing module exports** (Low) — Added `applyImport`, `safeSave`, `checkBackupReminder` to exports. Fixed.
+
+### Verdict
+
+**V5 VERIFIED COMPLETE** — Ready for V6.
+
+## V6: Recurring Life, Habits & Intelligent Time Management (Complete)
+
+Full verification report: `V6_VERIFICATION_REPORT.md`
+Implementation plan: `tasks/v6-plan.md`
+
+### What Changed
+
+**Recurring Events (app.js):**
+- Recurrence rules: daily, weekdays, weekly, monthly, yearly with interval support
+- One parent record + occurrence generation at render time (MAX_OCC=366 cap)
+- Edit flows: "this occurrence" (creates exception), "this and future" (splits series), "entire series"
+- Delete flows: single (excludedDates), future (sets endDate), all (removes parent + exceptions)
+- `generateOccurrences()`, `getEventsWithRecurrences()` — recurrence engine
+- `editRecurringSingle()`, `editRecurringFuture()`, `editRecurringAll()`
+- `deleteRecurringSingle()`, `deleteRecurringFuture()`, `deleteRecurringAll()`
+- Recurrence UI in event modal: frequency picker, interval, day-of-week buttons, end date
+- Recurring edit/delete dialogs with three-choice options
+
+**Habit System (app.js):**
+- Habit CRUD with `chronosHabits` localStorage key
+- Frequency types: daily, weekdays, weekly, custom (specific days)
+- Habit completion log in `chronosHabitLog` with 365-day pruning
+- Streak tracking: consecutive completed days
+- Weekly completion rate calculation
+- `isHabitDueOnDate()`, `getHabitStreak()`, `getHabitWeeklyCompletion()`
+- `logHabitCompletion()`, `getHabitLogEntry()`
+- Habits page: today's habits with check buttons, weekly summary with progress bars
+- Quick-complete and habit editor modal
+
+**Event Flexibility (app.js):**
+- `flexibility` field on every event: "fixed" / "protected" / "flexible"
+- Defaults by category: sleep=fixed, work/faith=protected, others=flexible
+- Flexibility picker UI in event modal
+- AI planner respects flexibility levels (12 scheduling rules, up from 10)
+
+**Time Intelligence (app.js):**
+- `calculateDayBudget()` and `calculateWeekBudget()` now use recurrence-aware functions
+- Budget includes recurring event occurrences correctly
+- Conflict detection works with recurring events
+
+**AI Enhancements (ai-planner.js):**
+- System prompt updated: 12 rules, habit awareness, "What Now" mode, flexibility rules
+- `what-now` action type: time-of-day aware suggestions
+- Context includes: habits (with streaks/completion rates), recurringCommitments, currentTime, flexibility
+- `buildUserMessage()` extended with habits, recurring commitments, flexibility labels
+- Safety: AI never auto-modifies habits or events — suggestions only
+
+**ICS Export (app.js):**
+- `buildICSRRule()` — converts recurrence rules to RFC 5545 RRULE strings
+- FREQ, INTERVAL, BYDAY, UNTIL parameters
+- EXDATE for excluded dates
+- `generateICS()` includes RRULE and EXDATE for recurring events
+
+**Dark Mode (style.css):**
+- CSS custom properties for all colors on `:root`
+- `[data-theme="dark"]` — full dark palette (slate/indigo)
+- `@media (prefers-color-scheme: dark)` auto-detection
+- `toggleDarkMode()` with preference persistence
+- Dark overrides for modal, inputs, buttons, cards, AI panel
+
+**Data Migration:**
+- `CURRENT_DATA_VERSION` bumped from 3 to 4
+- Migration adds: recurrence, seriesId, isException, excludedDates, flexibility to all events
+- `gatherAllData()` version 6, includes habits + habitLog
+- `applyImport()` restores habits + habitLog
+
+### Test Results
+
+| Test File | Tests | Status |
+|-----------|-------|--------|
+| dateUtils.test.js | 33 | PASS |
+| categories.test.js | 19 | PASS |
+| exportImport.test.js | 32 | PASS |
+| budget.test.js | 13 | PASS |
+| migration.test.js | 5 | PASS |
+| safety.test.js | 9 | PASS |
+| recurrence.test.js | 22 | PASS |
+| habits.test.js | 18 | PASS |
+| timeIntelligence.test.js | 14 | PASS |
+| **Total** | **165** | **ALL PASS** |
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| app.js | Recurrence engine, habit system, flexibility, dark mode, AI context, ICS RRULE, migration |
+| index.html | Habits nav button, dark mode data-theme |
+| style.css | Habits, recurrence, flexibility, dark mode styles |
+| netlify/functions/ai-planner.js | Habit-aware prompts, what-now action, flexibility rules |
+| package.json | Version 6.0.0 |
+| tests/recurrence.test.js | 22 new tests |
+| tests/habits.test.js | 18 new tests |
+| tests/timeIntelligence.test.js | 14 new tests |
+| tests/exportImport.test.js | 3 assertions updated for V6 |
+
+## V6 Verification Audit (2026-10-06)
+
+Full verification report: `V6_VERIFICATION_REPORT.md`
+
+### Results
+
+- **165 Vitest tests**: all pass (9 test files)
+- **28 feature checklist items**: all PASS
+- **V1-V5 regression**: all pass
+- **Security**: clean (API key server-side only, XSS protection, AI approval workflow intact)
+
+### Issues Found & Fixed During Verification
+
+1. **detectConflicts() missed recurring occurrences** (Medium) — only checked `state.events`, not generated occurrences. Fixed to use `getEventsWithRecurrences()`.
+2. **approveSuggestion() missing V6 fields** (Medium) — AI-approved events lacked recurrence/seriesId/isException/excludedDates/flexibility defaults. Fixed.
+3. **buildAIContext() didn't show recurring occurrences to AI** (Medium) — AI planner couldn't see recurring events on non-parent dates. Fixed to use `getEventsWithRecurrences()`.
+4. **No "What Now?" button in UI** (Low) — Backend support existed but no trigger button. Added button + handler.
+
+### Verdict
+
+**V6 VERIFIED COMPLETE** — Production ready.
+
+## V7: Product Validation, UX Polish & Commercial Readiness (Complete)
+
+Full verification report: `V7_VERIFICATION_REPORT.md`
+Product audit: `V7_PRODUCT_AUDIT.md`
+Product positioning: `PRODUCT_POSITIONING.md`
+Monetization strategy: `MONETIZATION_STRATEGY.md`
+Competitive analysis: `COMPETITIVE_ANALYSIS.md`
+
+### What Changed
+
+**Onboarding (app.js):**
+- Welcome overlay for first-time users — explains product, 3-step guide
+- "Try with sample data" button loads realistic demo content
+- Demo data: 12 events, 3 tasks, 6 goals, 4 habits (prefixed `demo_`)
+- "Clear Sample Data" in Settings removes only demo items
+- `onboardingComplete` preference prevents re-showing
+
+**AI Discoverability (index.html, app.js):**
+- "AI Planner" button added to sidebar navigation
+- "What Now?" promoted to primary dashboard action
+- "Plan My Day" as secondary dashboard action
+- AI features now accessible without keyboard shortcuts
+
+**UX Simplification (app.js):**
+- Flexibility label: "Flexibility" → "Can this move?"
+- Flexibility options: "Fixed/Protected/Flexible" → "No, never / If needed / Yes, anytime"
+- Life Balance Score: added explanation text for score and empty state
+
+**Styles (style.css):**
+- Welcome modal styles
+- Dashboard AI button row
+- Score explanation text
+- Sidebar AI nav button with accent color
+- Sidebar divider
+
+### Strategy Documents Created
+
+| Document | Purpose |
+|----------|---------|
+| V7_PRODUCT_AUDIT.md | New-user perspective analysis, UX problems, recommendations |
+| PRODUCT_POSITIONING.md | Category, customer, promise, differentiator |
+| MONETIZATION_STRATEGY.md | Free vs paid tier recommendation |
+| COMPETITIVE_ANALYSIS.md | Gap analysis vs 7 competitors |
+
+### Test Results
+
+- **165 / 165 tests pass** (9 test files, 0 failures)
+- V1-V6 regression: all pass
+
+### Verdict
+
+**V7 VERIFIED COMPLETE — READY FOR REAL USER VALIDATION**
+
+## Next Steps / Future Ideas (Unprioritized)
 - Time tracking (actual vs planned)
 - Smart notifications / reminders
 - Weekly/monthly trend analysis and insights
-- Protected time blocks ("never schedule over sleep")
 - AI-driven overbooking resolution
 - Multi-day event support
+- Habit analytics dashboard with charts
+- Habit-category contribution to Life Balance Score
