@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { resetStore } from './setup.js';
 
 const app = require('../app.js');
 const { gatherAllData, validateBackupFile, generateICS, icsEscape, state, seedDefaultCategories, rebuildCategories } = app;
@@ -16,9 +17,9 @@ beforeEach(() => {
 });
 
 describe('gatherAllData', () => {
-  it('returns object with version 5', () => {
+  it('returns object with version 6', () => {
     const data = gatherAllData();
-    expect(data.version).toBe(5);
+    expect(data.version).toBe(6);
   });
 
   it('includes exportedAt timestamp', () => {
@@ -98,6 +99,59 @@ describe('icsEscape', () => {
   it('handles empty', () => { expect(icsEscape('')).toBe(''); });
 });
 
+describe('backup does not contain secrets', () => {
+  it('has no API key fields', () => {
+    const data = gatherAllData();
+    const json = JSON.stringify(data);
+    expect(json).not.toContain('sk-ant');
+    expect(json).not.toContain('ANTHROPIC_API_KEY');
+    expect(json).not.toContain('password');
+    expect(json).not.toContain('token');
+  });
+
+  it('only contains expected top-level keys', () => {
+    const data = gatherAllData();
+    const keys = Object.keys(data).sort();
+    expect(keys).toEqual(['aiHistory', 'categories', 'events', 'exportedAt', 'goals', 'habitLog', 'habits', 'preferences', 'version'].sort());
+  });
+});
+
+describe('pre-import backup safety', () => {
+  beforeEach(() => { resetStore(); });
+
+  it('stores pre-import backup in localStorage before applying', () => {
+    const importData = {
+      version: 5,
+      events: [{ id: 'imp1', title: 'Imported', date: '2026-01-01' }],
+      goals: [],
+      preferences: { sleepHours: 9 },
+      categories: seedDefaultCategories(),
+    };
+    app.applyImport(importData);
+    const backup = localStorage.getItem('chronosPreImportBackup');
+    expect(backup).toBeTruthy();
+    const parsed = JSON.parse(backup);
+    expect(parsed.version).toBe(6);
+    expect(Array.isArray(parsed.events)).toBe(true);
+  });
+});
+
+describe('category ID stability through rename', () => {
+  it('category ID remains stable when label changes', () => {
+    const cat = state.categories.find(c => c.id === 'work-money');
+    const originalId = cat.id;
+    cat.label = 'Career & Finance';
+    rebuildCategories();
+    expect(cat.id).toBe(originalId);
+    const event = { id: 'e1', title: 'Work', date: '2026-10-05', category: 'work-money', type: 'event' };
+    state.events = [event];
+    expect(state.events[0].category).toBe('work-money');
+    const data = gatherAllData();
+    const exported = data.events.find(e => e.id === 'e1');
+    expect(exported.category).toBe('work-money');
+  });
+});
+
 describe('generateICS', () => {
   it('produces valid iCalendar wrapper', () => {
     const ics = generateICS();
@@ -135,5 +189,30 @@ describe('generateICS', () => {
   it('includes description when present', () => {
     const ics = generateICS();
     expect(ics).toContain('DESCRIPTION:Team sync');
+  });
+
+  it('includes UID per event', () => {
+    const ics = generateICS();
+    expect(ics).toContain('UID:e1@lifebalance');
+    expect(ics).toContain('UID:e2@lifebalance');
+  });
+
+  it('escapes special characters in titles', () => {
+    state.events = [{ id: 'sp1', title: 'Team; All-Hands, Q4', date: '2026-10-05', startTime: '10:00', endTime: '11:00', allDay: false, category: 'work-money', type: 'event' }];
+    const ics = generateICS();
+    expect(ics).toContain('SUMMARY:Team\\; All-Hands\\, Q4');
+  });
+
+  it('handles empty event list', () => {
+    state.events = [];
+    const ics = generateICS();
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('END:VCALENDAR');
+    expect(ics).not.toContain('BEGIN:VEVENT');
+  });
+
+  it('uses CRLF line endings', () => {
+    const ics = generateICS();
+    expect(ics).toContain('\r\n');
   });
 });

@@ -29,24 +29,42 @@ const DEFAULT_CATEGORIES = [
 function buildSystemPrompt(categories) {
   const cats = (categories && categories.length > 0) ? categories : DEFAULT_CATEGORIES;
   const catLines = cats.map(c => `- ${sanitize(c.id, 40)}: ${sanitize(c.label, 60)}`).join('\n');
-  return `You are LifeBalance AI, an intelligent personal time manager. You analyze the user's calendar, tasks, goals, and preferences to suggest optimal schedule changes.
+  return `You are LifeBalance AI, an intelligent personal time manager. You analyze the user's calendar, tasks, habits, goals, and preferences to suggest optimal schedule changes.
 
 You MUST respond with valid JSON only — no markdown, no explanation outside the JSON.
 
 ## Life Categories
 ${catLines}
 
-## 10 Scheduling Rules (follow strictly)
-1. Fixed commitments first — Never move or remove events the user has already scheduled for work, sleep, or faith unless they explicitly ask.
-2. Protected time — Respect the user's sleep hours preference. Never schedule over sleep time.
-3. Respect duration — Suggested events use realistic durations (minimum 15 minutes).
-4. Respect priority — High-priority tasks should be scheduled before low-priority ones.
-5. Respect deadlines — Tasks with due dates must be scheduled before their deadline.
-6. Respect life balance — Suggest time for under-served categories based on the user's goals.
-7. Preserve free time — Do not fill every gap. Leave at least 30 minutes of unscheduled breathing room.
-8. Avoid fragmentation — Group similar activities together. Avoid creating tiny 15-minute gaps between events.
-9. Avoid overbooking — Never suggest a schedule that exceeds 24 hours in a day.
-10. Explain trade-offs — Every suggestion must include a brief reason explaining why it's being made.
+## 12 Scheduling Rules (follow strictly)
+1. Fixed commitments first — Never move or remove events marked as "fixed" flexibility. These are immovable.
+2. Protected time — Events marked "protected" should not be moved unless the user explicitly asks. Respect sleep hours.
+3. Flexible time — Events marked "flexible" can be rearranged for optimization.
+4. Respect duration — Suggested events use realistic durations (minimum 15 minutes).
+5. Respect priority — High-priority tasks should be scheduled before low-priority ones.
+6. Respect deadlines — Tasks with due dates must be scheduled before their deadline.
+7. Respect life balance — Suggest time for under-served categories based on the user's goals.
+8. Preserve free time — Do not fill every gap. Leave at least 30 minutes of unscheduled breathing room.
+9. Avoid fragmentation — Group similar activities together. Avoid creating tiny 15-minute gaps between events.
+10. Avoid overbooking — Never suggest a schedule that exceeds 24 hours in a day.
+11. Respect recurring commitments — Recurring events represent ongoing obligations. Do not suggest removing them without strong reason.
+12. Explain trade-offs — Every suggestion must include a brief reason explaining why it's being made.
+
+## Habit Awareness
+When habits are provided, factor them into your analysis:
+- Suggest time slots for habits that haven't been completed today
+- Consider habit streaks — breaking a streak has a motivational cost
+- Habits with preferred times should be scheduled near those times
+- Never automatically create, modify, or delete habits — only suggest
+
+## "What Now" Mode
+When the action is "what-now", the user is asking what to do RIGHT NOW. Consider:
+- Current time of day
+- Upcoming commitments
+- Incomplete habits for today
+- Available free time until the next event
+- Energy levels (morning = high focus, after lunch = lower, evening = wind down)
+Provide 1-3 concrete, actionable suggestions for what to do in the immediate moment.
 
 ## Response Format
 Respond with this exact JSON structure:
@@ -91,7 +109,7 @@ function sanitize(str, maxLen = 200) {
 function validatePayload(body) {
   if (!body || typeof body !== 'object') return 'Request body must be a JSON object';
   if (!body.action) return 'Missing required field: action';
-  if (!['plan-day', 'plan-week', 'command'].includes(body.action)) return 'Invalid action. Must be: plan-day, plan-week, or command';
+  if (!['plan-day', 'plan-week', 'command', 'what-now'].includes(body.action)) return 'Invalid action. Must be: plan-day, plan-week, command, or what-now';
   if (!body.date) return 'Missing required field: date';
   if (body.action === 'command' && !body.command) return 'Missing required field: command';
   return null;
@@ -104,16 +122,25 @@ function buildUserMessage(body) {
     parts.push(`Please analyze my schedule for ${body.date} and suggest improvements.`);
   } else if (body.action === 'plan-week') {
     parts.push(`Please analyze my entire week starting ${body.date} and suggest improvements.`);
+  } else if (body.action === 'what-now') {
+    parts.push(`What should I do right now? Current time: ${sanitize(body.currentTime || 'unknown', 10)}. Date: ${body.date}.`);
+    parts.push('Give me 1-3 concrete suggestions for what to do in the next available time slot.');
   } else if (body.action === 'command') {
     parts.push(`User request: ${sanitize(body.command, MAX_COMMAND_LENGTH)}`);
     parts.push(`Context date: ${body.date}`);
+  }
+
+  if (body.currentTime) {
+    parts.push(`\n## Current Time: ${sanitize(body.currentTime, 10)}`);
   }
 
   if (body.events && body.events.length > 0) {
     parts.push('\n## Current Events');
     body.events.forEach(e => {
       const time = e.allDay ? 'All day' : `${e.startTime}-${e.endTime}`;
-      parts.push(`- [${sanitize(e.category, 30)}] ${sanitize(e.title)} | ${e.date} ${time}${e.type === 'task' ? ' (TASK)' : ''}`);
+      const flex = e.flexibility ? ` [${e.flexibility}]` : '';
+      const recur = e.isRecurring ? ' (recurring)' : '';
+      parts.push(`- [${sanitize(e.category, 30)}] ${sanitize(e.title)} | ${e.date} ${time}${flex}${recur}${e.type === 'task' ? ' (TASK)' : ''}`);
     });
   } else {
     parts.push('\n## Current Events\nNo events scheduled.');
@@ -123,6 +150,23 @@ function buildUserMessage(body) {
     parts.push('\n## Incomplete Tasks');
     body.tasks.forEach(t => {
       parts.push(`- [${t.priority || 'medium'}] ${sanitize(t.title)} (${sanitize(t.category, 30)}) due: ${t.date}`);
+    });
+  }
+
+  if (body.habits && body.habits.length > 0) {
+    parts.push('\n## Habits');
+    body.habits.forEach(h => {
+      const freq = h.targetFrequency ? h.targetFrequency.type : 'daily';
+      const streak = h.streak !== undefined ? ` | streak: ${h.streak} days` : '';
+      const status = h.completedToday ? ' ✓ done today' : ' ○ not done';
+      parts.push(`- ${sanitize(h.name, 60)} (${sanitize(h.category, 30)}) ${freq}, ${h.duration || 15}min${streak}${status}`);
+    });
+  }
+
+  if (body.recurringCommitments && body.recurringCommitments.length > 0) {
+    parts.push('\n## Recurring Commitments');
+    body.recurringCommitments.forEach(r => {
+      parts.push(`- ${sanitize(r.title, 60)} | ${r.freq} ${r.time || 'all day'} (${sanitize(r.category, 30)})`);
     });
   }
 

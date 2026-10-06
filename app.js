@@ -4,7 +4,9 @@ const GOALS_KEY = 'chronosGoals';
 const PREFS_KEY = 'chronosPreferences';
 const DATA_VERSION_KEY = 'chronosDataVersion';
 const CATEGORIES_KEY = 'chronosCategories';
-const CURRENT_DATA_VERSION = 3;
+const HABITS_KEY = 'chronosHabits';
+const HABIT_LOG_KEY = 'chronosHabitLog';
+const CURRENT_DATA_VERSION = 4;
 const MAX_ACTIVE_CATEGORIES = 15;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -50,6 +52,9 @@ const state = {
   selectedCategory: 'personal-other',
   taskFilter: 'incomplete',
   taskSort: 'date',
+  habits: [],
+  habitLog: [],
+  darkMode: false,
 };
 
 // ── DOM ──
@@ -137,6 +142,15 @@ function loadEvents() {
         e.category = CATEGORY_MIGRATION[e.category];
       }
       if (!e.category || !categoryExists(e.category)) e.category = 'personal-other';
+      if (e.recurrence === undefined) e.recurrence = null;
+      if (e.seriesId === undefined) e.seriesId = null;
+      if (e.isException === undefined) e.isException = false;
+      if (!e.excludedDates) e.excludedDates = [];
+      if (!e.flexibility) {
+        if (e.category === 'sleep') e.flexibility = 'fixed';
+        else if (e.category === 'work-money' || e.category === 'faith') e.flexibility = 'protected';
+        else e.flexibility = 'flexible';
+      }
       return e;
     });
     if (version < CURRENT_DATA_VERSION) {
@@ -237,9 +251,268 @@ function uniqueCategoryId(base) {
   return candidate;
 }
 
+// ── Habits Storage ──
+function loadHabits() {
+  try {
+    const raw = localStorage.getItem(HABITS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveHabits() { safeSave(HABITS_KEY, state.habits); }
+
+function loadHabitLog() {
+  try {
+    const raw = localStorage.getItem(HABIT_LOG_KEY);
+    const log = raw ? JSON.parse(raw) : [];
+    const cutoff = dateStr(addDays(new Date(), -365));
+    return log.filter(e => e.date >= cutoff);
+  } catch { return []; }
+}
+function saveHabitLog() { safeSave(HABIT_LOG_KEY, state.habitLog); }
+
+function getHabitStreak(habitId) {
+  const entries = state.habitLog
+    .filter(e => e.habitId === habitId && e.status === 'completed')
+    .map(e => e.date)
+    .sort()
+    .reverse();
+  if (!entries.length) return 0;
+  let streak = 0;
+  let check = todayStr();
+  if (entries[0] !== check) {
+    const yesterday = dateStr(addDays(new Date(), -1));
+    if (entries[0] !== yesterday) return 0;
+    check = yesterday;
+  }
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i] === check) {
+      streak++;
+      check = dateStr(addDays(new Date(check + 'T00:00:00'), -1));
+    } else if (entries[i] < check) {
+      break;
+    }
+  }
+  return streak;
+}
+
+function getHabitWeeklyCompletion(habitId, weekStart) {
+  let completed = 0, expected = 0;
+  const habit = state.habits.find(h => h.id === habitId);
+  if (!habit) return { completed: 0, expected: 0, rate: 0 };
+  for (let i = 0; i < 7; i++) {
+    const ds = dateStr(addDays(weekStart, i));
+    if (isHabitDueOnDate(habit, ds)) {
+      expected++;
+      if (state.habitLog.some(e => e.habitId === habitId && e.date === ds && e.status === 'completed')) {
+        completed++;
+      }
+    }
+  }
+  return { completed, expected, rate: expected > 0 ? Math.round(completed / expected * 100) : 0 };
+}
+
+function isHabitDueOnDate(habit, ds) {
+  if (habit.status !== 'active') return false;
+  if (ds < habit.startDate) return false;
+  if (habit.endDate && ds > habit.endDate) return false;
+  const d = new Date(ds + 'T00:00:00');
+  const dayOfWeek = (d.getDay() + 6) % 7;
+  const freq = habit.targetFrequency;
+  if (freq.type === 'daily') return true;
+  if (freq.type === 'weekdays') return dayOfWeek < 5;
+  if (freq.type === 'weekly' || freq.type === 'custom') {
+    return (freq.daysOfWeek || []).includes(dayOfWeek);
+  }
+  return false;
+}
+
+function getTodayHabits() {
+  const ds = todayStr();
+  return state.habits.filter(h => isHabitDueOnDate(h, ds));
+}
+
+function getHabitLogEntry(habitId, ds) {
+  return state.habitLog.find(e => e.habitId === habitId && e.date === ds);
+}
+
+function logHabitCompletion(habitId, ds, status, notes) {
+  const existing = state.habitLog.findIndex(e => e.habitId === habitId && e.date === ds);
+  if (existing !== -1) {
+    state.habitLog[existing].status = status;
+    if (notes !== undefined) state.habitLog[existing].notes = notes;
+  } else {
+    state.habitLog.push({ habitId, date: ds, status, notes: notes || '' });
+  }
+  saveHabitLog();
+}
+
+// ── Recurrence Engine ──
+function generateOccurrences(event, rangeStart, rangeEnd) {
+  if (!event.recurrence) return [];
+  const rule = event.recurrence;
+  const excluded = new Set(event.excludedDates || []);
+  const occurrences = [];
+  const startDate = new Date(event.date + 'T00:00:00');
+  const endBound = rule.endDate ? new Date(rule.endDate + 'T00:00:00') : new Date(rangeEnd + 'T00:00:00');
+  const rangeBound = new Date(rangeEnd + 'T00:00:00');
+  const end = endBound < rangeBound ? endBound : rangeBound;
+  const rangeStartDate = new Date(rangeStart + 'T00:00:00');
+  const interval = rule.interval || 1;
+  const MAX_OCC = 366;
+
+  let cursor = new Date(startDate);
+  let count = 0;
+
+  while (cursor <= end && count < MAX_OCC) {
+    const ds = dateStr(cursor);
+    if (ds >= rangeStart && !excluded.has(ds)) {
+      const dayOfWeek = (cursor.getDay() + 6) % 7;
+      let include = false;
+
+      if (rule.freq === 'daily') {
+        const dayDiff = Math.round((cursor - startDate) / 86400000);
+        include = dayDiff % interval === 0;
+      } else if (rule.freq === 'weekdays') {
+        include = dayOfWeek < 5;
+      } else if (rule.freq === 'weekly') {
+        const dayDiff = Math.round((cursor - startDate) / 86400000);
+        const weekDiff = Math.floor(dayDiff / 7);
+        if (weekDiff % interval === 0) {
+          include = (rule.daysOfWeek || [dayOfWeek]).includes(dayOfWeek);
+        }
+      } else if (rule.freq === 'monthly') {
+        if (cursor.getDate() === startDate.getDate()) {
+          const monthDiff = (cursor.getFullYear() - startDate.getFullYear()) * 12 + cursor.getMonth() - startDate.getMonth();
+          include = monthDiff >= 0 && monthDiff % interval === 0;
+        }
+      } else if (rule.freq === 'yearly') {
+        if (cursor.getMonth() === startDate.getMonth() && cursor.getDate() === startDate.getDate()) {
+          const yearDiff = cursor.getFullYear() - startDate.getFullYear();
+          include = yearDiff >= 0 && yearDiff % interval === 0;
+        }
+      }
+
+      if (include) {
+        occurrences.push({
+          ...event,
+          date: ds,
+          _generated: true,
+          _parentId: event.id,
+        });
+        count++;
+      }
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return occurrences;
+}
+
+function getEventsWithRecurrences(rangeStart, rangeEnd) {
+  const result = [];
+  const exceptionsBySeriesDate = {};
+
+  state.events.forEach(e => {
+    if (e.isException && e.seriesId) {
+      const key = e.seriesId + ':' + e.date;
+      exceptionsBySeriesDate[key] = e;
+    }
+  });
+
+  state.events.forEach(e => {
+    if (e.isException) return;
+    if (e.recurrence) {
+      const occs = generateOccurrences(e, rangeStart, rangeEnd);
+      occs.forEach(occ => {
+        const excKey = e.id + ':' + occ.date;
+        if (exceptionsBySeriesDate[excKey]) {
+          result.push(exceptionsBySeriesDate[excKey]);
+        } else {
+          result.push(occ);
+        }
+      });
+    } else {
+      if (e.date >= rangeStart && e.date <= rangeEnd) {
+        result.push(e);
+      }
+    }
+  });
+  return result;
+}
+
+function editRecurringSingle(parentId, occDate, changes) {
+  const parent = state.events.find(e => e.id === parentId);
+  if (!parent) return;
+  if (!parent.excludedDates) parent.excludedDates = [];
+  parent.excludedDates.push(occDate);
+  const exception = {
+    ...parent,
+    ...changes,
+    id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    date: occDate,
+    seriesId: parentId,
+    isException: true,
+    recurrence: null,
+    excludedDates: [],
+  };
+  state.events.push(exception);
+  saveEvents();
+}
+
+function editRecurringFuture(parentId, fromDate, changes) {
+  const parent = state.events.find(e => e.id === parentId);
+  if (!parent || !parent.recurrence) return;
+  const oldEnd = parent.recurrence.endDate;
+  parent.recurrence.endDate = dateStr(addDays(new Date(fromDate + 'T00:00:00'), -1));
+  const newSeries = {
+    ...parent,
+    ...changes,
+    id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    date: fromDate,
+    recurrence: { ...parent.recurrence, ...changes.recurrence, endDate: oldEnd },
+    seriesId: null,
+    isException: false,
+    excludedDates: [],
+  };
+  if (!newSeries.recurrence.endDate) newSeries.recurrence.endDate = oldEnd;
+  state.events.push(newSeries);
+  saveEvents();
+}
+
+function editRecurringAll(parentId, changes) {
+  const parent = state.events.find(e => e.id === parentId);
+  if (!parent) return;
+  Object.assign(parent, changes);
+  state.events = state.events.filter(e => !(e.isException && e.seriesId === parentId));
+  parent.excludedDates = [];
+  saveEvents();
+}
+
+function deleteRecurringSingle(parentId, occDate) {
+  const parent = state.events.find(e => e.id === parentId);
+  if (!parent) return;
+  if (!parent.excludedDates) parent.excludedDates = [];
+  parent.excludedDates.push(occDate);
+  state.events = state.events.filter(e => !(e.isException && e.seriesId === parentId && e.date === occDate));
+  saveEvents();
+}
+
+function deleteRecurringFuture(parentId, fromDate) {
+  const parent = state.events.find(e => e.id === parentId);
+  if (!parent || !parent.recurrence) return;
+  parent.recurrence.endDate = dateStr(addDays(new Date(fromDate + 'T00:00:00'), -1));
+  state.events = state.events.filter(e => !(e.isException && e.seriesId === parentId && e.date >= fromDate));
+  saveEvents();
+}
+
+function deleteRecurringAll(parentId) {
+  state.events = state.events.filter(e => e.id !== parentId && !(e.isException && e.seriesId === parentId));
+  saveEvents();
+}
+
 // ── Budget & Balance Calculations ──
 function calculateDayBudget(ds) {
-  const dayEvents = state.events.filter(e => e.date === ds && e.type !== 'task');
+  const allEvents = getEventsWithRecurrences(ds, ds);
+  const dayEvents = allEvents.filter(e => e.date === ds && e.type !== 'task');
   const totals = {};
   for (const key of Object.keys(CATEGORIES)) totals[key] = 0;
   let scheduledMin = 0;
@@ -301,7 +574,8 @@ function getTasksForDate(ds) {
 }
 
 function eventsForDate(ds) {
-  return state.events
+  const all = getEventsWithRecurrences(ds, ds);
+  return all
     .filter(e => e.date === ds && state.activeCategories.has(e.category))
     .sort((a, b) => {
       if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
@@ -382,7 +656,7 @@ function addMiniDay(y, m, d, outside, todayS, selS) {
   if (outside) el.classList.add('outside');
   if (ds === todayS) el.classList.add('today');
   if (ds === selS && ds !== todayS) el.classList.add('selected');
-  if (state.events.some(e => e.date === ds)) el.classList.add('has-events');
+  if (getEventsWithRecurrences(ds, ds).some(e => e.date === ds)) el.classList.add('has-events');
   el.textContent = d;
   el.setAttribute('role', 'button');
   el.setAttribute('tabindex', '0');
@@ -404,7 +678,7 @@ function renderCalList() {
     el.setAttribute('aria-checked', String(active));
     el.setAttribute('tabindex', '0');
     el.setAttribute('aria-label', `${cat.label} calendar`);
-    el.innerHTML = `<div class="cal-check" style="border-color:${cat.color};color:${cat.color}"></div><span class="cal-item-label">${cat.label}</span>`;
+    el.innerHTML = `<div class="cal-check" style="border-color:${cat.color};color:${cat.color}"></div><span class="cal-item-label">${esc(cat.label)}</span>`;
     const toggle = () => {
       if (state.activeCategories.has(key)) {
         if (state.activeCategories.size > 1) state.activeCategories.delete(key);
@@ -432,6 +706,7 @@ function updateHeading() {
   if (state.currentPage === 'dashboard') { headingEl.textContent = 'Dashboard'; return; }
   if (state.currentPage === 'tasks') { headingEl.textContent = 'Tasks'; return; }
   if (state.currentPage === 'goals') { headingEl.textContent = 'Goals'; return; }
+  if (state.currentPage === 'habits') { headingEl.textContent = 'Habits'; return; }
   if (state.currentPage === 'settings') { headingEl.textContent = 'Settings'; return; }
   if (state.currentPage === 'categories') { headingEl.textContent = 'Manage Categories'; return; }
   switch (state.currentView) {
@@ -494,6 +769,7 @@ function renderView() {
   switch (state.currentPage) {
     case 'dashboard': renderDashboard(); break;
     case 'tasks': renderTasksView(); break;
+    case 'habits': renderHabitsView(); break;
     case 'goals': renderGoalsView(); break;
     case 'settings': renderSettingsView(); break;
     case 'categories': renderCategoriesView(); break;
@@ -822,7 +1098,7 @@ function renderYearView() {
     for (let d = 1; d <= dim; d++) {
       const ds = fmtDate(year, m, d);
       const el = document.createElement('div');
-      el.className = 'yv-day' + (ds === todayS ? ' today' : '') + (state.events.some(e => e.date === ds) ? ' has-events' : '');
+      el.className = 'yv-day' + (ds === todayS ? ' today' : '') + (getEventsWithRecurrences(ds, ds).some(e => e.date === ds) ? ' has-events' : '');
       el.textContent = d;
       grid.appendChild(el);
     }
@@ -863,10 +1139,10 @@ function renderDashboard() {
         <h1 class="dash-greeting">${greeting}</h1>
         <p class="dash-date">${nowDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
       </div>
-      <button class="dash-ai-btn" onclick="handlePlanDay()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
-        Plan My Day
-      </button>
+      <div class="dash-ai-buttons">
+        <button class="dash-ai-btn" onclick="handleWhatNow()">What Now?</button>
+        <button class="dash-ai-btn dash-ai-btn-secondary" onclick="handlePlanDay()">Plan My Day</button>
+      </div>
     </div>
     <div class="dash-grid">
       <div class="dash-card dash-summary">
@@ -906,11 +1182,12 @@ function renderDashboard() {
           <span class="dash-score-max">/ 100</span>
         </div>
         <p class="dash-score-msg">${balanceScore >= 75 ? 'Great balance!' : balanceScore >= 50 ? 'Some areas need attention' : 'Review your schedule'}</p>
+        <p class="dash-score-explain">Measures how closely your scheduled time matches your weekly goals across all life categories.</p>
         <button class="btn btn-ghost btn-sm" onclick="switchPage('goals')">View Goals</button>
       </div>` : `
       <div class="dash-card dash-balance">
         <h3 class="dash-card-title">Life Balance Score</h3>
-        <p class="dash-score-msg" style="margin:16px 0">Set weekly goals to see your balance score</p>
+        <p class="dash-score-msg" style="margin:16px 0">Set weekly hour goals for each life area to track how well your schedule matches your priorities.</p>
         <button class="btn btn-ghost btn-sm" onclick="switchPage('goals')">Set Goals</button>
       </div>`}
 
@@ -922,13 +1199,37 @@ function renderDashboard() {
             const pct = Math.min(100, (min / 1440) * 100);
             return `<div class="dash-cat-row">
               <span class="dash-cat-dot" style="background:${cat.color}"></span>
-              <span class="dash-cat-label">${cat.label}</span>
+              <span class="dash-cat-label">${esc(cat.label)}</span>
               <div class="dash-cat-bar-track"><div class="dash-cat-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
               <span class="dash-cat-time">${min > 0 ? formatMinutes(min) : '—'}</span>
             </div>`;
           }).join('')}
         </div>
       </div>
+
+      ${(() => {
+        const todayHabs = getTodayHabits();
+        if (!todayHabs.length) return '';
+        const ds = todayStr();
+        return `<div class="dash-card dash-habits-card">
+          <h3 class="dash-card-title">Today's Habits <span class="dash-tasks-count">${todayHabs.filter(h => !getHabitLogEntry(h.id, ds) || getHabitLogEntry(h.id, ds).status === 'pending').length} remaining</span></h3>
+          <div class="habits-today-list">
+          ${todayHabs.map(h => {
+            const entry = getHabitLogEntry(h.id, ds);
+            const st = entry?.status || 'pending';
+            const cat = catStyle(h.category);
+            return `<div class="habit-today-row ${st !== 'pending' ? 'habit-done' : ''}">
+              <button class="habit-check-btn ${st === 'completed' ? 'checked' : ''}" onclick="quickLogHabit('${h.id}','${ds}','completed')">
+                ${st === 'completed' ? '✓' : '○'}
+              </button>
+              <span class="habit-today-name">${esc(h.name)}</span>
+              <span class="task-cat-dot" style="background:${cat.color}"></span>
+            </div>`;
+          }).join('')}
+          </div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="switchPage('habits')">View All Habits</button>
+        </div>`;
+      })()}
 
       <div class="dash-card dash-tasks-card">
         <h3 class="dash-card-title">Tasks <span class="dash-tasks-count">${incompleteTasks.length} pending</span></h3>
@@ -940,7 +1241,7 @@ function renderDashboard() {
                 <span class="dash-task-checkmark"></span>
               </label>
               <span class="dash-task-title">${esc(t.title)}</span>
-              <span class="dash-cat-dot" style="background:${catStyle(t.category).color}" title="${CATEGORIES[t.category]?.label || ''}"></span>
+              <span class="dash-cat-dot" style="background:${catStyle(t.category).color}" title="${esc(CATEGORIES[t.category]?.label || '')}"></span>
             </div>
           `).join('')}
           ${incompleteTasks.length === 0 ? '<p class="dash-empty">No pending tasks</p>' : ''}
@@ -1118,7 +1419,7 @@ function renderGoalsView() {
         return `<div class="goal-row">
           <div class="goal-cat">
             <span class="goal-dot" style="background:${cat.color}"></span>
-            <span class="goal-label">${cat.label}</span>
+            <span class="goal-label">${esc(cat.label)}</span>
           </div>
           <div class="goal-progress">
             <div class="goal-bar-track"><div class="goal-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
@@ -1369,6 +1670,212 @@ function moveCategoryDown(id) {
   renderView();
 }
 
+// ── Habits View ──
+function renderHabitsView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'habits-view';
+  const ds = todayStr();
+  const weekStart = getMonday(state.currentDate);
+  const todayHabits = getTodayHabits();
+  const activeHabits = state.habits.filter(h => h.status === 'active');
+
+  let html = `<div class="habits-header">
+    <h2 class="habits-title">Habits</h2>
+    <button class="btn btn-primary btn-sm" id="habit-add-btn">+ New Habit</button>
+  </div>`;
+
+  if (todayHabits.length > 0) {
+    html += `<div class="dash-card habits-today-card"><h3 class="dash-card-title">Today's Habits</h3><div class="habits-today-list">`;
+    todayHabits.forEach(h => {
+      const entry = getHabitLogEntry(h.id, ds);
+      const status = entry?.status || 'pending';
+      const cat = catStyle(h.category);
+      const streak = getHabitStreak(h.id);
+      html += `<div class="habit-today-row ${status !== 'pending' ? 'habit-done' : ''}">
+        <button class="habit-check-btn ${status === 'completed' ? 'checked' : ''}" onclick="quickLogHabit('${h.id}','${ds}','completed')" title="Mark complete">
+          ${status === 'completed' ? '✓' : '○'}
+        </button>
+        <div class="habit-today-info">
+          <span class="habit-today-name">${esc(h.name)}</span>
+          <span class="habit-today-meta">
+            <span class="task-cat-dot" style="background:${cat.color}"></span>
+            ${h.duration}min${h.preferredTime ? ' · ' + formatTime12(h.preferredTime) : ''}
+            ${streak > 0 ? ` · <span class="habit-streak">${streak}d streak</span>` : ''}
+          </span>
+        </div>
+        <div class="habit-today-actions">
+          ${status === 'pending' ? `<button class="btn btn-ghost btn-xs" onclick="quickLogHabit('${h.id}','${ds}','skipped')">Skip</button>` : `<span class="habit-status-badge habit-status-${status}">${status}</span>`}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  if (activeHabits.length > 0) {
+    html += `<div class="dash-card"><h3 class="dash-card-title">Weekly Progress</h3><div class="habits-weekly-list">`;
+    activeHabits.forEach(h => {
+      const wk = getHabitWeeklyCompletion(h.id, weekStart);
+      const cat = catStyle(h.category);
+      const streak = getHabitStreak(h.id);
+      html += `<div class="habit-weekly-row" onclick="openHabitEditor('${h.id}')">
+        <span class="task-cat-dot" style="background:${cat.color}"></span>
+        <span class="habit-weekly-name">${esc(h.name)}</span>
+        <div class="habit-weekly-bar"><div class="habit-weekly-fill" style="width:${wk.rate}%;background:${cat.color}"></div></div>
+        <span class="habit-weekly-stat">${wk.completed}/${wk.expected}</span>
+        ${streak > 0 ? `<span class="habit-streak">${streak}d</span>` : ''}
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  if (activeHabits.length === 0) {
+    html += `<div class="dash-card"><p style="padding:16px;color:var(--text-muted)">No habits yet. Create your first habit to start tracking.</p></div>`;
+  }
+
+  const inactive = state.habits.filter(h => h.status === 'inactive');
+  if (inactive.length > 0) {
+    html += `<div class="dash-card"><h3 class="dash-card-title">Inactive Habits</h3>`;
+    inactive.forEach(h => {
+      const cat = catStyle(h.category);
+      html += `<div class="habit-weekly-row" onclick="openHabitEditor('${h.id}')">
+        <span class="task-cat-dot" style="background:${cat.color}"></span>
+        <span class="habit-weekly-name" style="opacity:0.6">${esc(h.name)}</span>
+        <span class="habit-status-badge">inactive</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+  document.getElementById('habit-add-btn')?.addEventListener('click', () => openHabitEditor(null));
+}
+
+function quickLogHabit(habitId, ds, status) {
+  logHabitCompletion(habitId, ds, status);
+  renderView();
+}
+
+function openHabitEditor(editId) {
+  const existing = editId ? state.habits.find(h => h.id === editId) : null;
+  const overlay = document.createElement('div');
+  overlay.className = 'import-preview-overlay';
+  const title = existing ? 'Edit Habit' : 'New Habit';
+  const name = existing?.name || '';
+  const cat = existing?.category || 'personal-other';
+  const duration = existing?.duration || 30;
+  const priority = existing?.priority || 'medium';
+  const prefTime = existing?.preferredTime || '';
+  const freqType = existing?.targetFrequency?.type || 'daily';
+  const freqDays = existing?.targetFrequency?.daysOfWeek || [];
+  const freqTimes = existing?.targetFrequency?.timesPerWeek || 3;
+  const notes = existing?.notes || '';
+  const habitStatus = existing?.status || 'active';
+  const endDate = existing?.endDate || '';
+
+  let html = `<div class="import-preview-modal habit-editor-modal">
+    <h3>${title}</h3>
+    <div class="form-group"><label>Name</label><input type="text" id="habit-name" value="${esc(name)}" maxlength="60" placeholder="e.g., Exercise" class="setting-input" style="width:100%"></div>
+    <div class="form-group"><label>Category</label><select id="habit-cat" class="setting-input" style="width:100%">
+      ${Object.entries(CATEGORIES).map(([k,c]) => `<option value="${k}" ${k===cat?'selected':''}>${esc(c.label)}</option>`).join('')}
+    </select></div>
+    <div class="form-group"><label>Duration (minutes)</label><input type="number" id="habit-duration" min="5" max="480" value="${duration}" class="setting-input" style="width:80px"></div>
+    <div class="form-group"><label>Preferred time</label><input type="time" id="habit-time" value="${prefTime}" class="setting-input" style="width:auto"></div>
+    <div class="form-group"><label>Frequency</label><select id="habit-freq" class="setting-input" style="width:auto">
+      <option value="daily" ${freqType==='daily'?'selected':''}>Every day</option>
+      <option value="weekdays" ${freqType==='weekdays'?'selected':''}>Weekdays</option>
+      <option value="custom" ${freqType==='custom'?'selected':''}>Custom days</option>
+    </select></div>
+    <div id="habit-days-area" class="${freqType==='custom'?'':'hidden'}">
+      <div class="rec-days">${DAYS_SHORT.map((d,i) =>
+        `<button type="button" class="rec-day-btn ${freqDays.includes(i)?'selected':''}" data-day="${i}">${d}</button>`
+      ).join('')}</div>
+    </div>
+    <div class="form-group"><label>Priority</label><select id="habit-priority" class="setting-input" style="width:auto">
+      <option value="low" ${priority==='low'?'selected':''}>Low</option>
+      <option value="medium" ${priority==='medium'?'selected':''}>Medium</option>
+      <option value="high" ${priority==='high'?'selected':''}>High</option>
+    </select></div>
+    <div class="form-group"><label>Notes</label><textarea id="habit-notes" rows="2" class="setting-input" style="width:100%">${esc(notes)}</textarea></div>
+    ${existing ? `<div class="form-group"><label>Status</label><select id="habit-status" class="setting-input" style="width:auto">
+      <option value="active" ${habitStatus==='active'?'selected':''}>Active</option>
+      <option value="inactive" ${habitStatus==='inactive'?'selected':''}>Inactive</option>
+    </select></div>` : ''}
+    <div class="form-group"><label>End date (optional)</label><input type="date" id="habit-end" value="${endDate}" class="setting-input" style="width:auto"></div>
+    <div class="import-preview-actions">
+      ${existing ? `<button class="btn btn-danger btn-sm" id="habit-delete">Delete</button>` : '<span></span>'}
+      <div><button class="btn btn-ghost" id="habit-cancel">Cancel</button>
+      <button class="btn btn-primary" id="habit-save">Save</button></div>
+    </div>
+  </div>`;
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+
+  let selectedDays = [...freqDays];
+  overlay.querySelectorAll('.rec-day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = parseInt(btn.dataset.day);
+      const idx = selectedDays.indexOf(d);
+      if (idx !== -1) selectedDays.splice(idx, 1); else selectedDays.push(d);
+      btn.classList.toggle('selected');
+    });
+  });
+  overlay.querySelector('#habit-freq').addEventListener('change', (e) => {
+    document.getElementById('habit-days-area').classList.toggle('hidden', e.target.value !== 'custom');
+  });
+  overlay.querySelector('#habit-cancel').addEventListener('click', () => overlay.remove());
+  const delBtn = overlay.querySelector('#habit-delete');
+  if (delBtn) delBtn.addEventListener('click', () => {
+    if (!confirm('Delete this habit and its history?')) return;
+    state.habits = state.habits.filter(h => h.id !== editId);
+    state.habitLog = state.habitLog.filter(l => l.habitId !== editId);
+    saveHabits(); saveHabitLog();
+    overlay.remove(); renderView();
+  });
+  overlay.querySelector('#habit-save').addEventListener('click', () => {
+    const nameVal = document.getElementById('habit-name').value.trim();
+    if (!nameVal) { showToast('Habit name is required', 'error'); return; }
+    const freqVal = document.getElementById('habit-freq').value;
+    const freq = {
+      type: freqVal,
+      timesPerWeek: freqVal === 'daily' ? 7 : freqVal === 'weekdays' ? 5 : selectedDays.length,
+      daysOfWeek: freqVal === 'custom' ? selectedDays.sort() : freqVal === 'weekdays' ? [0,1,2,3,4] : [0,1,2,3,4,5,6],
+    };
+    const now = new Date().toISOString();
+    if (existing) {
+      existing.name = nameVal;
+      existing.category = document.getElementById('habit-cat').value;
+      existing.duration = parseInt(document.getElementById('habit-duration').value) || 30;
+      existing.preferredTime = document.getElementById('habit-time').value || null;
+      existing.targetFrequency = freq;
+      existing.priority = document.getElementById('habit-priority').value;
+      existing.notes = document.getElementById('habit-notes').value;
+      existing.endDate = document.getElementById('habit-end').value || null;
+      existing.status = document.getElementById('habit-status')?.value || 'active';
+      existing.updatedAt = now;
+    } else {
+      state.habits.push({
+        id: 'hab_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        name: nameVal,
+        category: document.getElementById('habit-cat').value,
+        targetFrequency: freq,
+        preferredTime: document.getElementById('habit-time').value || null,
+        duration: parseInt(document.getElementById('habit-duration').value) || 30,
+        priority: document.getElementById('habit-priority').value,
+        status: 'active',
+        startDate: todayStr(),
+        endDate: document.getElementById('habit-end').value || null,
+        notes: document.getElementById('habit-notes').value,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    saveHabits();
+    overlay.remove();
+    renderView();
+  });
+}
+
 // ── Settings View ──
 function renderSettingsView() {
   const wrap = document.createElement('div');
@@ -1401,6 +1908,16 @@ function renderSettingsView() {
         </select>
       </div>
     </div>
+    <h3 class="settings-subtitle">Appearance</h3>
+    <div class="settings-list">
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Dark Mode</span>
+          <span class="setting-desc">Use dark theme</span>
+        </div>
+        <label class="toggle-label"><input type="checkbox" id="dark-mode-toggle" ${state.darkMode ? 'checked' : ''}><span class="toggle-switch"></span></label>
+      </div>
+    </div>
     <h3 class="settings-subtitle">Data Management</h3>
     <div class="settings-list">
       <div class="setting-row">
@@ -1425,9 +1942,31 @@ function renderSettingsView() {
         </div>
         <button class="btn btn-ghost btn-sm" onclick="exportICS()">Export .ics</button>
       </div>
+      ${state.preferences.hasDemoData ? `<div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Sample Data</span>
+          <span class="setting-desc">Remove the sample events, goals, and habits loaded during onboarding</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="clearDemoData()">Clear Sample Data</button>
+      </div>` : `<div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Sample Data</span>
+          <span class="setting-desc">Load example events, goals, and habits to explore the app</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadDemoData();renderView();showToast('Sample data loaded!','success')">Load Sample Data</button>
+      </div>`}
     </div>
   `;
   viewEl.appendChild(wrap);
+  const dmToggle = document.getElementById('dark-mode-toggle');
+  if (dmToggle) dmToggle.addEventListener('change', () => toggleDarkMode(dmToggle.checked));
+}
+
+function toggleDarkMode(on) {
+  state.darkMode = on;
+  state.preferences.darkMode = on;
+  savePreferences();
+  document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
 }
 
 function updatePref(key, value) {
@@ -1458,10 +1997,26 @@ function openModal(ds, eventId, startTime, allDay, type) {
   state.editingType = 'event';
   state.selectedPriority = 'medium';
 
+  state.editingRecurrence = null;
+  state.editingRecurrenceScope = null;
+  state.editingFlexibility = 'flexible';
+  state.editingOrigDate = null;
+  state.editingParentId = null;
+
   if (eventId) {
-    const ev = state.events.find(e => e.id === eventId);
+    let ev = state.events.find(e => e.id === eventId);
+    if (!ev) {
+      const gen = getEventsWithRecurrences(ds, ds).find(e => e._parentId === eventId && e.date === ds);
+      if (gen) { ev = gen; eventId = gen._parentId; }
+    }
     if (!ev) return;
-    state.editingEventId = eventId;
+
+    if (ev._generated && ev._parentId) {
+      state.editingParentId = ev._parentId;
+      state.editingOrigDate = ev.date;
+    }
+
+    state.editingEventId = ev._generated ? ev._parentId : eventId;
     modalTitleEl.textContent = 'Edit Event';
     fTitle.value = ev.title;
     fDate.value = ev.date;
@@ -1472,6 +2027,9 @@ function openModal(ds, eventId, startTime, allDay, type) {
     state.selectedCategory = ev.category || 'personal-other';
     state.editingType = ev.type || 'event';
     state.selectedPriority = ev.priority || 'medium';
+    state.editingFlexibility = ev.flexibility || 'flexible';
+    const parent = state.events.find(e => e.id === state.editingEventId);
+    state.editingRecurrence = parent?.recurrence ? { ...parent.recurrence } : null;
     deleteBtn.classList.remove('hidden');
   } else {
     state.editingEventId = null;
@@ -1492,9 +2050,103 @@ function openModal(ds, eventId, startTime, allDay, type) {
     document.querySelectorAll('.prio-btn').forEach(b => b.classList.toggle('selected', b.dataset.prio === (state.selectedPriority || 'medium')));
   }
   renderCatPicker();
+  renderRecurrenceUI();
+  renderFlexibilityUI();
   modalEl.classList.remove('hidden');
   document.addEventListener('keydown', trapFocus);
   fTitle.focus();
+}
+
+function renderRecurrenceUI() {
+  let area = document.getElementById('recurrence-area');
+  if (!area) {
+    area = document.createElement('div');
+    area.id = 'recurrence-area';
+    area.className = 'form-group';
+    const descGroup = document.getElementById('event-desc').parentElement;
+    descGroup.parentElement.insertBefore(area, descGroup);
+  }
+  if (state.editingType === 'task') { area.innerHTML = ''; return; }
+  const rec = state.editingRecurrence;
+  const checked = !!rec;
+  let html = `<label class="toggle-label"><input type="checkbox" id="recurrence-toggle" ${checked ? 'checked' : ''}><span class="toggle-switch"></span>Repeat</label>`;
+  if (checked) {
+    html += `<div class="recurrence-options">
+      <div class="form-row"><select id="rec-freq" class="setting-input" style="width:auto">
+        <option value="daily" ${rec.freq==='daily'?'selected':''}>Daily</option>
+        <option value="weekdays" ${rec.freq==='weekdays'?'selected':''}>Weekdays</option>
+        <option value="weekly" ${rec.freq==='weekly'?'selected':''}>Weekly</option>
+        <option value="monthly" ${rec.freq==='monthly'?'selected':''}>Monthly</option>
+        <option value="yearly" ${rec.freq==='yearly'?'selected':''}>Yearly</option>
+      </select>
+      <label style="margin-left:8px">every <input type="number" id="rec-interval" min="1" max="52" value="${rec.interval||1}" class="setting-input" style="width:60px"> ${rec.freq==='weekly'?'week(s)':rec.freq==='monthly'?'month(s)':rec.freq==='yearly'?'year(s)':'day(s)'}</label></div>`;
+    if (rec.freq === 'weekly') {
+      const days = rec.daysOfWeek || [];
+      html += `<div class="rec-days">${DAYS_SHORT.map((d,i) =>
+        `<button type="button" class="rec-day-btn ${days.includes(i)?'selected':''}" data-day="${i}">${d}</button>`
+      ).join('')}</div>`;
+    }
+    html += `<div class="form-row" style="margin-top:8px"><label>End date <input type="date" id="rec-end" value="${rec.endDate||''}" class="setting-input" style="width:auto"></label></div>`;
+    html += `</div>`;
+  }
+  area.innerHTML = html;
+  const toggle = document.getElementById('recurrence-toggle');
+  if (toggle) toggle.addEventListener('change', () => {
+    if (toggle.checked) {
+      state.editingRecurrence = { freq: 'weekly', interval: 1, daysOfWeek: [(new Date(fDate.value+'T00:00:00').getDay()+6)%7], endDate: null, seriesId: 'ser_' + Date.now() };
+    } else {
+      state.editingRecurrence = null;
+    }
+    renderRecurrenceUI();
+  });
+  const freqSel = document.getElementById('rec-freq');
+  if (freqSel) freqSel.addEventListener('change', () => {
+    state.editingRecurrence.freq = freqSel.value;
+    if (freqSel.value === 'weekly' && !state.editingRecurrence.daysOfWeek?.length) {
+      state.editingRecurrence.daysOfWeek = [(new Date(fDate.value+'T00:00:00').getDay()+6)%7];
+    }
+    renderRecurrenceUI();
+  });
+  const intInput = document.getElementById('rec-interval');
+  if (intInput) intInput.addEventListener('change', () => { state.editingRecurrence.interval = parseInt(intInput.value) || 1; });
+  const endInput = document.getElementById('rec-end');
+  if (endInput) endInput.addEventListener('change', () => { state.editingRecurrence.endDate = endInput.value || null; });
+  area.querySelectorAll('.rec-day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = parseInt(btn.dataset.day);
+      const days = state.editingRecurrence.daysOfWeek || [];
+      const idx = days.indexOf(d);
+      if (idx !== -1) { if (days.length > 1) days.splice(idx, 1); }
+      else days.push(d);
+      state.editingRecurrence.daysOfWeek = days;
+      renderRecurrenceUI();
+    });
+  });
+}
+
+function renderFlexibilityUI() {
+  let area = document.getElementById('flexibility-area');
+  if (!area) {
+    area = document.createElement('div');
+    area.id = 'flexibility-area';
+    area.className = 'form-group';
+    const descGroup = document.getElementById('event-desc').parentElement;
+    descGroup.parentElement.insertBefore(area, descGroup);
+  }
+  if (state.editingType === 'task') { area.innerHTML = ''; return; }
+  const flex = state.editingFlexibility || 'flexible';
+  area.innerHTML = `<label>Can this move?</label>
+    <div class="flexibility-picker">
+      <button type="button" class="flex-btn ${flex==='fixed'?'selected':''}" data-flex="fixed" title="Cannot be moved or changed">No, never</button>
+      <button type="button" class="flex-btn ${flex==='protected'?'selected':''}" data-flex="protected" title="Only move with good reason">If needed</button>
+      <button type="button" class="flex-btn ${flex==='flexible'?'selected':''}" data-flex="flexible" title="Can be freely rearranged">Yes, anytime</button>
+    </div>`;
+  area.querySelectorAll('.flex-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.editingFlexibility = btn.dataset.flex;
+      renderFlexibilityUI();
+    });
+  });
 }
 
 function closeModal() {
@@ -1523,7 +2175,7 @@ function renderCatPicker() {
     el.setAttribute('aria-checked', String(isSel));
     el.setAttribute('tabindex', '0');
     el.setAttribute('aria-label', `${cat.label} category`);
-    el.innerHTML = `<span class="cat-dot" style="background:${cat.color}"></span>${cat.label}`;
+    el.innerHTML = `<span class="cat-dot" style="background:${cat.color}"></span>${esc(cat.label)}`;
     el.addEventListener('click', () => { state.selectedCategory = key; renderCatPicker(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); state.selectedCategory = key; renderCatPicker(); } });
     catPicker.appendChild(el);
@@ -1554,20 +2206,48 @@ function handleSave(e) {
     category: state.selectedCategory,
     description: fDesc.value.trim(),
     type: state.editingType,
+    flexibility: state.editingFlexibility || 'flexible',
   };
   if (isTask) {
     data.priority = state.selectedPriority || 'medium';
     if (!state.editingEventId) data.completed = false;
   }
-  if (!isAllDay && timeToMin(data.endTime) <= timeToMin(data.startTime)) {
+  if (!isAllDay && !isTask && timeToMin(data.endTime) <= timeToMin(data.startTime)) {
     const corrected = Math.min(timeToMin(data.startTime) + 60, 1439);
     data.endTime = `${pad(Math.floor(corrected / 60))}:${pad(corrected % 60)}`;
   }
+
+  const parent = state.editingEventId ? state.events.find(ev => ev.id === state.editingEventId) : null;
+  const isRecurringParent = parent?.recurrence && !parent.isException;
+
+  if (state.editingEventId && isRecurringParent && state.editingParentId) {
+    showRecurringEditDialog(data);
+    return;
+  }
+
+  if (isTask) {
+    data.recurrence = null;
+    data.seriesId = null;
+    data.isException = false;
+    data.excludedDates = [];
+  } else {
+    data.recurrence = state.editingRecurrence;
+    if (!state.editingEventId && data.recurrence) {
+      data.seriesId = null;
+      data.isException = false;
+      data.excludedDates = [];
+    }
+  }
+
   if (state.editingEventId) {
     const idx = state.events.findIndex(ev => ev.id === state.editingEventId);
-    if (idx !== -1) state.events[idx] = { ...state.events[idx], ...data };
+    if (idx !== -1) {
+      const kept = state.events[idx];
+      state.events[idx] = { ...kept, ...data, recurrence: data.recurrence !== undefined ? data.recurrence : kept.recurrence };
+    }
   } else {
     data.id = 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    if (!data.recurrence) { data.recurrence = null; data.seriesId = null; data.isException = false; data.excludedDates = []; }
     state.events.push(data);
   }
   saveEvents();
@@ -1575,13 +2255,82 @@ function handleSave(e) {
   renderAll();
 }
 
+function showRecurringEditDialog(data) {
+  const overlay = document.createElement('div');
+  overlay.className = 'import-preview-overlay';
+  overlay.innerHTML = `<div class="import-preview-modal">
+    <h3>Edit Recurring Event</h3>
+    <p>This event is part of a series. What would you like to change?</p>
+    <div class="rec-edit-actions">
+      <button class="btn btn-ghost" id="rec-edit-single">This occurrence</button>
+      <button class="btn btn-ghost" id="rec-edit-future">This &amp; future</button>
+      <button class="btn btn-primary" id="rec-edit-all">Entire series</button>
+    </div>
+    <button class="btn btn-ghost" id="rec-edit-cancel" style="margin-top:8px">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('rec-edit-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('rec-edit-single').addEventListener('click', () => {
+    editRecurringSingle(state.editingEventId, state.editingOrigDate, data);
+    overlay.remove(); closeModal(); renderAll();
+  });
+  document.getElementById('rec-edit-future').addEventListener('click', () => {
+    editRecurringFuture(state.editingEventId, state.editingOrigDate, data);
+    overlay.remove(); closeModal(); renderAll();
+  });
+  document.getElementById('rec-edit-all').addEventListener('click', () => {
+    editRecurringAll(state.editingEventId, data);
+    overlay.remove(); closeModal(); renderAll();
+  });
+}
+
 function handleDelete() {
   if (!state.editingEventId) return;
+  const ev = state.events.find(e => e.id === state.editingEventId);
+  if (ev?.recurrence && !ev.isException) {
+    showRecurringDeleteDialog();
+    return;
+  }
+  if (state.editingParentId) {
+    if (!confirm('Delete this occurrence?')) return;
+    deleteRecurringSingle(state.editingParentId, state.editingOrigDate);
+    closeModal(); renderAll(); return;
+  }
   if (!confirm('Delete this event?')) return;
   state.events = state.events.filter(e => e.id !== state.editingEventId);
   saveEvents();
   closeModal();
   renderAll();
+}
+
+function showRecurringDeleteDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'import-preview-overlay';
+  overlay.innerHTML = `<div class="import-preview-modal">
+    <h3>Delete Recurring Event</h3>
+    <p>This event is part of a series. What would you like to delete?</p>
+    <div class="rec-edit-actions">
+      <button class="btn btn-ghost" id="rec-del-single">This occurrence</button>
+      <button class="btn btn-ghost" id="rec-del-future">This &amp; future</button>
+      <button class="btn btn-danger" id="rec-del-all">Entire series</button>
+    </div>
+    <button class="btn btn-ghost" id="rec-del-cancel" style="margin-top:8px">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('rec-del-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('rec-del-single').addEventListener('click', () => {
+    deleteRecurringSingle(state.editingEventId, state.editingOrigDate || fDate.value);
+    overlay.remove(); closeModal(); renderAll();
+  });
+  document.getElementById('rec-del-future').addEventListener('click', () => {
+    deleteRecurringFuture(state.editingEventId, state.editingOrigDate || fDate.value);
+    overlay.remove(); closeModal(); renderAll();
+  });
+  document.getElementById('rec-del-all').addEventListener('click', () => {
+    if (!confirm('Delete all occurrences of this event? This cannot be undone.')) return;
+    deleteRecurringAll(state.editingEventId);
+    overlay.remove(); closeModal(); renderAll();
+  });
 }
 
 // ── AI Planner ──
@@ -1644,12 +2393,10 @@ function buildAIContext(action, targetDate, command) {
 
   let events = [];
   if (action === 'plan-week') {
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(weekStart, i);
-      events = events.concat(state.events.filter(e => e.date === dateStr(d) && e.type !== 'task'));
-    }
+    const weekEnd = dateStr(addDays(weekStart, 6));
+    events = getEventsWithRecurrences(dateStr(weekStart), weekEnd).filter(e => e.type !== 'task');
   } else {
-    events = state.events.filter(e => e.date === ds && e.type !== 'task');
+    events = getEventsWithRecurrences(ds, ds).filter(e => e.type !== 'task');
   }
 
   const tasks = state.events.filter(e => e.type === 'task' && !e.completed);
@@ -1659,10 +2406,22 @@ function buildAIContext(action, targetDate, command) {
     goals[g.category] = g.targetHoursPerWeek;
   });
 
+  const activeHabits = state.habits.filter(h => h.status === 'active');
+  const habitSummary = activeHabits.map(h => {
+    const wk = getHabitWeeklyCompletion(h.id, getMonday(new Date(ds + 'T00:00:00')));
+    const streak = getHabitStreak(h.id);
+    return { name: h.name, category: h.category, duration: h.duration, frequency: h.targetFrequency.type, weeklyRate: wk.rate, streak, priority: h.priority };
+  });
+
+  const recurringEvents = state.events.filter(e => e.recurrence && !e.isException).map(e => ({
+    title: e.title, category: e.category, startTime: e.startTime, endTime: e.endTime, allDay: e.allDay,
+    frequency: e.recurrence.freq, flexibility: e.flexibility || 'flexible',
+  }));
+
   return {
     action,
     date: ds,
-    events: events.map(e => ({ id: e.id, title: e.title, date: e.date, startTime: e.startTime, endTime: e.endTime, allDay: e.allDay, category: e.category, type: e.type })),
+    events: events.map(e => ({ id: e.id, title: e.title, date: e.date, startTime: e.startTime, endTime: e.endTime, allDay: e.allDay, category: e.category, type: e.type, flexibility: e.flexibility || 'flexible' })),
     tasks: tasks.map(t => ({ id: t.id, title: t.title, date: t.date, category: t.category, priority: t.priority || 'medium' })),
     goals,
     preferences: { sleepHours: state.preferences.sleepHours, workHoursTarget: state.preferences.workHoursTarget },
@@ -1670,6 +2429,9 @@ function buildAIContext(action, targetDate, command) {
     budgetSummary: budget.categoryTotals,
     command: command || undefined,
     categories: Object.entries(CATEGORIES).map(([id, c]) => ({ id, label: c.label })),
+    habits: habitSummary,
+    recurringCommitments: recurringEvents,
+    currentTime: `${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`,
   };
 }
 
@@ -1828,10 +2590,11 @@ function detectConflicts(suggestion) {
   if (ev.allDay) return [];
   const newStart = timeToMin(ev.startTime);
   const newEnd = timeToMin(ev.endTime);
-  return state.events.filter(e =>
-    e.date === ev.date && e.type !== 'task' && !e.allDay &&
+  const dayEvents = getEventsWithRecurrences(ev.date, ev.date);
+  return dayEvents.filter(e =>
+    e.type !== 'task' && !e.allDay &&
     timeToMin(e.startTime) < newEnd && timeToMin(e.endTime) > newStart
-  ).map(e => ({ id: e.id, title: e.title, time: `${formatTime12(e.startTime)}-${formatTime12(e.endTime)}` }));
+  ).map(e => ({ id: e.id || e._parentId, title: e.title, time: `${formatTime12(e.startTime)}-${formatTime12(e.endTime)}` }));
 }
 
 function renderAILoading() {
@@ -1926,6 +2689,11 @@ function approveSuggestion(index) {
       description: '',
       type: s.event.type || 'event',
       completed: false,
+      recurrence: null,
+      seriesId: null,
+      isException: false,
+      excludedDates: [],
+      flexibility: 'flexible',
     };
     state.events.push(newEvent);
     saveEvents();
@@ -1991,6 +2759,14 @@ async function handlePlanWeek() {
   if (aiState.loading) return;
   openAIPanel();
   const context = buildAIContext('plan-week');
+  const result = await callAIPlanner(context);
+  if (result) renderAISuggestions(result);
+}
+
+async function handleWhatNow() {
+  if (aiState.loading) return;
+  openAIPanel();
+  const context = buildAIContext('what-now');
   const result = await callAIPlanner(context);
   if (result) renderAISuggestions(result);
 }
@@ -2133,12 +2909,14 @@ function checkStorageUsage() {
 // ── Export / Import ──
 function gatherAllData() {
   return {
-    version: 5,
+    version: 6,
     exportedAt: new Date().toISOString(),
     events: state.events,
     goals: state.goals,
     preferences: state.preferences,
     categories: state.categories,
+    habits: state.habits,
+    habitLog: state.habitLog,
     aiHistory: (() => { try { return JSON.parse(localStorage.getItem('chronosAIHistory') || '[]'); } catch { return []; } })(),
   };
 }
@@ -2222,6 +3000,9 @@ function showImportPreview(data) {
 }
 
 function applyImport(data) {
+  try {
+    localStorage.setItem('chronosPreImportBackup', JSON.stringify(gatherAllData()));
+  } catch {}
   state.events = data.events;
   saveEvents();
   if (data.goals) { state.goals = data.goals; saveGoals(); }
@@ -2235,6 +3016,14 @@ function applyImport(data) {
     rebuildCategories();
     state.activeCategories = new Set(Object.keys(CATEGORIES));
   }
+  if (data.habits && Array.isArray(data.habits)) {
+    state.habits = data.habits;
+    saveHabits();
+  }
+  if (data.habitLog && Array.isArray(data.habitLog)) {
+    state.habitLog = data.habitLog;
+    saveHabitLog();
+  }
   if (data.aiHistory) {
     try { localStorage.setItem('chronosAIHistory', JSON.stringify(data.aiHistory)); } catch {}
   }
@@ -2243,7 +3032,7 @@ function applyImport(data) {
 }
 
 function generateICS() {
-  const events = state.events.filter(e => e.type !== 'task');
+  const events = state.events.filter(e => e.type !== 'task' && !e.isException);
   let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LifeBalance//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
   events.forEach(e => {
     ics += 'BEGIN:VEVENT\r\n';
@@ -2257,6 +3046,14 @@ function generateICS() {
       ics += `DTSTART:${d}T${(e.startTime || '09:00').replace(':', '')}00\r\n`;
       ics += `DTEND:${d}T${(e.endTime || '10:00').replace(':', '')}00\r\n`;
     }
+    if (e.recurrence) {
+      ics += buildICSRRule(e.recurrence) + '\r\n';
+      if (e.excludedDates?.length) {
+        e.excludedDates.forEach(ed => {
+          ics += `EXDATE${e.allDay ? ';VALUE=DATE' : ''}:${ed.replace(/-/g, '')}${e.allDay ? '' : 'T' + (e.startTime || '09:00').replace(':', '') + '00'}\r\n`;
+        });
+      }
+    }
     ics += `SUMMARY:${icsEscape(e.title)}\r\n`;
     if (e.description) ics += `DESCRIPTION:${icsEscape(e.description)}\r\n`;
     const cat = catStyle(e.category);
@@ -2265,6 +3062,20 @@ function generateICS() {
   });
   ics += 'END:VCALENDAR\r\n';
   return ics;
+}
+
+function buildICSRRule(rule) {
+  const freqMap = { daily: 'DAILY', weekdays: 'WEEKLY', weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' };
+  const dayMap = ['MO','TU','WE','TH','FR','SA','SU'];
+  let rrule = `RRULE:FREQ=${freqMap[rule.freq] || 'WEEKLY'}`;
+  if (rule.interval && rule.interval > 1) rrule += `;INTERVAL=${rule.interval}`;
+  if (rule.freq === 'weekdays') {
+    rrule += ';BYDAY=MO,TU,WE,TH,FR';
+  } else if (rule.freq === 'weekly' && rule.daysOfWeek?.length) {
+    rrule += ';BYDAY=' + rule.daysOfWeek.map(d => dayMap[d]).join(',');
+  }
+  if (rule.endDate) rrule += `;UNTIL=${rule.endDate.replace(/-/g, '')}T235959`;
+  return rrule;
 }
 
 function icsEscape(s) {
@@ -2358,6 +3169,7 @@ document.querySelectorAll('.view-switcher button').forEach(btn => {
 $('ai-panel-close').addEventListener('click', closeAIPanel);
 $('ai-plan-day').addEventListener('click', () => handlePlanDay());
 $('ai-plan-week').addEventListener('click', () => handlePlanWeek());
+$('ai-what-now').addEventListener('click', () => handleWhatNow());
 $('ai-command-send').addEventListener('click', () => {
   const input = $('ai-command-input');
   handleAICommand(input.value);
@@ -2404,8 +3216,15 @@ rebuildCategories();
 state.events = loadEvents();
 state.goals = loadGoals();
 state.preferences = loadPreferences();
+state.habits = loadHabits();
+state.habitLog = loadHabitLog();
 state.activeCategories = new Set(Object.keys(CATEGORIES));
 loadCommandHistory();
+state.darkMode = !!state.preferences.darkMode;
+if (state.darkMode) document.documentElement.setAttribute('data-theme', 'dark');
+else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && state.preferences.darkMode === undefined) {
+  state.darkMode = true; document.documentElement.setAttribute('data-theme', 'dark');
+}
 state.currentPage = state.preferences.startPage || 'dashboard';
 document.querySelectorAll('.view-switcher button').forEach(b => b.classList.toggle('active', b.dataset.view === state.currentView));
 renderCalList();
@@ -2413,6 +3232,116 @@ switchPage(state.currentPage);
 setInterval(updateNowIndicator, 60000);
 checkStorageUsage();
 setTimeout(checkBackupReminder, 2000);
+setTimeout(showWelcome, 500);
+
+// ── Welcome / Onboarding ──
+function showWelcome() {
+  if (state.preferences.onboardingComplete) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'import-preview-overlay';
+  overlay.id = 'welcome-overlay';
+  overlay.innerHTML = `<div class="import-preview-modal welcome-modal">
+    <div class="welcome-header">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <h2>Welcome to LifeBalance AI</h2>
+    </div>
+    <p class="welcome-tagline">Your time. Your priorities. Your life.</p>
+    <p class="welcome-desc">LifeBalance AI helps you plan your time around what matters most. Track how you spend time across life categories, set balance goals, build habits, and let AI suggest a better schedule.</p>
+    <div class="welcome-steps">
+      <div class="welcome-step">
+        <span class="welcome-step-num">1</span>
+        <div><strong>Add your commitments</strong><br>Create events for work, family, and everything in between.</div>
+      </div>
+      <div class="welcome-step">
+        <span class="welcome-step-num">2</span>
+        <div><strong>Set balance goals</strong><br>Choose how many hours per week for each life area.</div>
+      </div>
+      <div class="welcome-step">
+        <span class="welcome-step-num">3</span>
+        <div><strong>Ask AI for help</strong><br>Click "Plan My Day" or "What Now?" and let AI optimize your schedule.</div>
+      </div>
+    </div>
+    <div class="welcome-actions">
+      <button class="btn btn-ghost" id="welcome-demo">Try with sample data</button>
+      <button class="btn btn-primary" id="welcome-start">Get started</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('welcome-start').addEventListener('click', () => {
+    state.preferences.onboardingComplete = true;
+    savePreferences();
+    overlay.remove();
+  });
+  document.getElementById('welcome-demo').addEventListener('click', () => {
+    loadDemoData();
+    state.preferences.onboardingComplete = true;
+    savePreferences();
+    overlay.remove();
+    renderAll();
+    showToast('Sample data loaded! Explore the app, then clear it from Settings when ready.', 'success');
+  });
+}
+
+// ── Demo / Sample Data ──
+function loadDemoData() {
+  if (state.events.length > 0 || state.habits.length > 0) {
+    if (!confirm('This will add sample data alongside your existing data. Continue?')) return;
+  }
+  const today = todayStr();
+  const now = new Date();
+  const tomorrow = dateStr(addDays(now, 1));
+  const dayAfter = dateStr(addDays(now, 2));
+  const prefix = 'demo_';
+  const demoEvents = [
+    { id: prefix+'sleep', title: 'Sleep', date: today, startTime: '22:00', endTime: '06:00', allDay: true, category: 'sleep', description: '', type: 'event', completed: false, recurrence: { freq: 'daily', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'fixed' },
+    { id: prefix+'standup', title: 'Team Standup', date: today, startTime: '09:00', endTime: '09:30', allDay: false, category: 'work-money', description: 'Daily sync', type: 'event', completed: false, recurrence: { freq: 'weekdays', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'protected' },
+    { id: prefix+'focus', title: 'Deep Work', date: today, startTime: '09:30', endTime: '12:00', allDay: false, category: 'work-money', description: 'Focus block', type: 'event', completed: false, recurrence: { freq: 'weekdays', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'protected' },
+    { id: prefix+'lunch', title: 'Lunch', date: today, startTime: '12:00', endTime: '13:00', allDay: false, category: 'food-meals', description: '', type: 'event', completed: false, recurrence: { freq: 'daily', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+    { id: prefix+'meeting', title: 'Project Review', date: today, startTime: '14:00', endTime: '15:00', allDay: false, category: 'work-money', description: 'Weekly project sync', type: 'event', completed: false, recurrence: { freq: 'weekly', interval: 1, daysOfWeek: [(now.getDay()+6)%7], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'protected' },
+    { id: prefix+'family', title: 'Family Dinner', date: today, startTime: '18:00', endTime: '19:30', allDay: false, category: 'family', description: '', type: 'event', completed: false, recurrence: { freq: 'daily', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'protected' },
+    { id: prefix+'prayer', title: 'Prayer / Reflection', date: today, startTime: '06:30', endTime: '07:00', allDay: false, category: 'faith', description: '', type: 'event', completed: false, recurrence: { freq: 'daily', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'fixed' },
+    { id: prefix+'task1', title: 'Review quarterly report', date: today, startTime: '09:00', endTime: '10:00', allDay: false, category: 'work-money', description: '', type: 'task', completed: false, priority: 'high', recurrence: null, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+    { id: prefix+'task2', title: 'Book dentist appointment', date: tomorrow, startTime: '09:00', endTime: '10:00', allDay: false, category: 'personal-other', description: '', type: 'task', completed: false, priority: 'medium', recurrence: null, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+    { id: prefix+'task3', title: 'Plan weekend family outing', date: dayAfter, startTime: '09:00', endTime: '10:00', allDay: false, category: 'family', description: '', type: 'task', completed: false, priority: 'medium', recurrence: null, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+    { id: prefix+'workout', title: 'Gym / Exercise', date: today, startTime: '07:00', endTime: '08:00', allDay: false, category: 'personal-other', description: '', type: 'event', completed: false, recurrence: { freq: 'weekly', interval: 1, daysOfWeek: [0,2,4], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+    { id: prefix+'reading', title: 'Reading Time', date: today, startTime: '21:00', endTime: '21:45', allDay: false, category: 'entertainment', description: '', type: 'event', completed: false, recurrence: { freq: 'daily', interval: 1, daysOfWeek: [], endDate: null }, seriesId: null, isException: false, excludedDates: [], flexibility: 'flexible' },
+  ];
+  state.events = state.events.concat(demoEvents);
+  saveEvents();
+  const demoGoals = [
+    { id: prefix+'g1', title: 'Work / Money', category: 'work-money', targetHoursPerWeek: 40, description: '', active: true },
+    { id: prefix+'g2', title: 'Family / Relationships', category: 'family', targetHoursPerWeek: 14, description: '', active: true },
+    { id: prefix+'g3', title: 'Faith', category: 'faith', targetHoursPerWeek: 7, description: '', active: true },
+    { id: prefix+'g4', title: 'Personal / Other', category: 'personal-other', targetHoursPerWeek: 5, description: '', active: true },
+    { id: prefix+'g5', title: 'Entertainment / Recreation', category: 'entertainment', targetHoursPerWeek: 7, description: '', active: true },
+    { id: prefix+'g6', title: 'Sleep', category: 'sleep', targetHoursPerWeek: 49, description: '', active: true },
+  ];
+  if (state.goals.length === 0) { state.goals = demoGoals; saveGoals(); }
+  const demoHabits = [
+    { id: prefix+'h1', name: 'Exercise', category: 'personal-other', targetFrequency: { type: 'custom', timesPerWeek: 3, daysOfWeek: [0,2,4] }, preferredTime: '07:00', duration: 60, priority: 'high', status: 'active', startDate: today, endDate: null, notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: prefix+'h2', name: 'Read 30 minutes', category: 'entertainment', targetFrequency: { type: 'daily', timesPerWeek: 7, daysOfWeek: [0,1,2,3,4,5,6] }, preferredTime: '21:00', duration: 30, priority: 'medium', status: 'active', startDate: today, endDate: null, notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: prefix+'h3', name: 'Morning prayer', category: 'faith', targetFrequency: { type: 'daily', timesPerWeek: 7, daysOfWeek: [0,1,2,3,4,5,6] }, preferredTime: '06:30', duration: 30, priority: 'high', status: 'active', startDate: today, endDate: null, notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: prefix+'h4', name: 'Drink 8 glasses of water', category: 'personal-other', targetFrequency: { type: 'daily', timesPerWeek: 7, daysOfWeek: [0,1,2,3,4,5,6] }, preferredTime: null, duration: 5, priority: 'low', status: 'active', startDate: today, endDate: null, notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  ];
+  if (state.habits.length === 0) { state.habits = demoHabits; saveHabits(); }
+  state.preferences.hasDemoData = true;
+  savePreferences();
+}
+
+function clearDemoData() {
+  if (!confirm('Remove all sample data? Your own data will be kept.')) return;
+  state.events = state.events.filter(e => !e.id.startsWith('demo_'));
+  state.goals = state.goals.filter(g => !g.id.startsWith('demo_'));
+  state.habits = state.habits.filter(h => !h.id.startsWith('demo_'));
+  state.habitLog = state.habitLog.filter(l => !l.habitId.startsWith('demo_'));
+  saveEvents(); saveGoals(); saveHabits(); saveHabitLog();
+  state.preferences.hasDemoData = false;
+  savePreferences();
+  renderAll();
+  showToast('Sample data removed.', 'info');
+}
 
 // ── Test Exports ──
 if (typeof module !== 'undefined' && module.exports) {
@@ -2421,8 +3350,14 @@ if (typeof module !== 'undefined' && module.exports) {
     formatMinutes, formatTime12,
     seedDefaultCategories, generateColorVariants, toKebabCase, uniqueCategoryId,
     calculateDayBudget, calculateWeekBudget, calculateBalanceScore,
-    gatherAllData, validateBackupFile, generateICS, icsEscape,
+    gatherAllData, validateBackupFile, generateICS, icsEscape, buildICSRRule, applyImport,
     categoryExists, rebuildCategories, getAllCategories,
+    safeSave, checkStorageUsage, checkBackupReminder,
+    generateOccurrences, getEventsWithRecurrences,
+    editRecurringSingle, editRecurringFuture, editRecurringAll,
+    deleteRecurringSingle, deleteRecurringFuture, deleteRecurringAll,
+    isHabitDueOnDate, getHabitStreak, getHabitWeeklyCompletion, logHabitCompletion, getHabitLogEntry,
+    loadHabits, saveHabits, loadHabitLog, saveHabitLog,
     getActiveCategories: () => CATEGORIES,
     CATEGORY_MIGRATION, DEFAULT_CATEGORIES,
     state,
