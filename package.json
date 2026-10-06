@@ -1,15 +1,19 @@
 {
   "name": "lifebalance-ai",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "private": true,
   "description": "LifeBalance AI — Personal Time Manager with Claude AI",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:etsy": "node scripts/build-etsy.js",
+    "build:pdfs": "node scripts/build-pdfs.js",
+    "build:templates": "node scripts/build-templates.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0"
   },
   "devDependencies": {
+    "pdf-lib": "^1.17.1",
     "vitest": "^3.1.1"
   }
 }

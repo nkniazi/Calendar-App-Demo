@@ -1,3 +1,6 @@
+// ── Edition ──
+const LB_EDITION = typeof __LB_EDITION__ !== 'undefined' ? __LB_EDITION__ : 'web';
+
 // ── Constants ──
 const STORAGE_KEY = 'chronosEvents';
 const GOALS_KEY = 'chronosGoals';
@@ -6,6 +9,12 @@ const DATA_VERSION_KEY = 'chronosDataVersion';
 const CATEGORIES_KEY = 'chronosCategories';
 const HABITS_KEY = 'chronosHabits';
 const HABIT_LOG_KEY = 'chronosHabitLog';
+const BRAIN_DUMP_KEY = 'chronosBrainDump';
+const ENERGY_LOG_KEY = 'chronosEnergyLog';
+const BUDGET_KEY = 'chronosBudget';
+const MEAL_PLAN_KEY = 'chronosMealPlan';
+const JOURNAL_KEY = 'chronosJournal';
+const GOAL_HIERARCHY_KEY = 'chronosGoalHierarchy';
 const CURRENT_DATA_VERSION = 4;
 const MAX_ACTIVE_CATEGORIES = 15;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -55,6 +64,13 @@ const state = {
   habits: [],
   habitLog: [],
   darkMode: false,
+  brainDump: [],
+  energyLog: [],
+  budgetItems: [],
+  mealPlan: {},
+  journal: {},
+  goalHierarchy: {},
+  focusTimer: { running: false, remaining: 0, mode: 'work', workMin: 25, breakMin: 5 },
 };
 
 // ── DOM ──
@@ -509,6 +525,266 @@ function deleteRecurringAll(parentId) {
   saveEvents();
 }
 
+// ── Brain Dump ──
+function loadBrainDump() { try { return JSON.parse(localStorage.getItem(BRAIN_DUMP_KEY) || '[]'); } catch { return []; } }
+function saveBrainDump() { safeSave(BRAIN_DUMP_KEY, state.brainDump); }
+
+function addBrainDumpItem(text) {
+  if (!text.trim()) return;
+  state.brainDump.push({ id: 'bd_' + Date.now() + '_' + Math.random().toString(36).slice(2,5), text: text.trim(), createdAt: new Date().toISOString() });
+  saveBrainDump();
+}
+
+function removeBrainDumpItem(id) {
+  state.brainDump = state.brainDump.filter(i => i.id !== id);
+  saveBrainDump();
+}
+
+function brainDumpToTask(item) {
+  openModal(todayStr(), null, null, false, 'task');
+  setTimeout(() => { if (fTitle) fTitle.value = item.text; }, 50);
+  removeBrainDumpItem(item.id);
+}
+
+// ── Energy / Mood Log ──
+function loadEnergyLog() { try { return JSON.parse(localStorage.getItem(ENERGY_LOG_KEY) || '[]'); } catch { return []; } }
+function saveEnergyLog() { safeSave(ENERGY_LOG_KEY, state.energyLog); }
+
+function logEnergy(ds, energy, mood) {
+  const existing = state.energyLog.findIndex(e => e.date === ds);
+  if (existing !== -1) { state.energyLog[existing] = { date: ds, energy, mood }; }
+  else { state.energyLog.push({ date: ds, energy, mood }); }
+  saveEnergyLog();
+}
+
+function getEnergyForDate(ds) { return state.energyLog.find(e => e.date === ds) || null; }
+
+// ── Simple Budget Tracker ──
+function loadBudgetItems() { try { return JSON.parse(localStorage.getItem(BUDGET_KEY) || '[]'); } catch { return []; } }
+function saveBudgetItems() { safeSave(BUDGET_KEY, state.budgetItems); }
+
+function addBudgetItem(month, type, description, amount, category) {
+  state.budgetItems.push({
+    id: 'bgt_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    month, type, description: description.trim(), amount: Math.round(amount * 100) / 100, category: category || 'personal-other',
+  });
+  saveBudgetItems();
+}
+
+function removeBudgetItem(id) { state.budgetItems = state.budgetItems.filter(i => i.id !== id); saveBudgetItems(); }
+
+function getBudgetTotals(month) {
+  const items = state.budgetItems.filter(i => i.month === month);
+  const income = items.filter(i => i.type === 'income').reduce((s, i) => s + i.amount, 0);
+  const expenses = items.filter(i => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
+  return { income: Math.round(income * 100) / 100, expenses: Math.round(expenses * 100) / 100, balance: Math.round((income - expenses) * 100) / 100, items };
+}
+
+// ── Meal Planner ──
+function loadMealPlan() { try { return JSON.parse(localStorage.getItem(MEAL_PLAN_KEY) || '{}'); } catch { return {}; } }
+function saveMealPlan() { safeSave(MEAL_PLAN_KEY, state.mealPlan); }
+
+function setMeal(weekKey, day, slot, meal, ingredients) {
+  if (!state.mealPlan[weekKey]) state.mealPlan[weekKey] = {};
+  if (!state.mealPlan[weekKey][day]) state.mealPlan[weekKey][day] = {};
+  state.mealPlan[weekKey][day][slot] = { meal: meal.trim(), ingredients: ingredients.trim() };
+  saveMealPlan();
+}
+
+function getGroceryList(weekKey) {
+  const week = state.mealPlan[weekKey];
+  if (!week) return [];
+  const items = {};
+  Object.values(week).forEach(day => {
+    Object.values(day).forEach(slot => {
+      if (slot.ingredients) {
+        slot.ingredients.split(',').forEach(ing => {
+          const t = ing.trim().toLowerCase();
+          if (t) items[t] = (items[t] || 0) + 1;
+        });
+      }
+    });
+  });
+  return Object.entries(items).sort((a, b) => a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count }));
+}
+
+// ── Journal ──
+function loadJournal() { try { return JSON.parse(localStorage.getItem(JOURNAL_KEY) || '{}'); } catch { return {}; } }
+function saveJournal() { safeSave(JOURNAL_KEY, state.journal); }
+
+function getJournalEntry(ds) { return state.journal[ds] || { gratitude: ['', '', ''], notes: '' }; }
+function setJournalEntry(ds, entry) { state.journal[ds] = entry; saveJournal(); }
+
+// ── Goal Hierarchy ──
+function loadGoalHierarchy() { try { return JSON.parse(localStorage.getItem(GOAL_HIERARCHY_KEY) || '{}'); } catch { return {}; } }
+function saveGoalHierarchy() { safeSave(GOAL_HIERARCHY_KEY, state.goalHierarchy); }
+function updateGoalHierarchy(level, text) { state.goalHierarchy[level] = text; saveGoalHierarchy(); }
+
+// ── Focus Timer Logic ──
+let focusTimerInterval = null;
+
+function startFocusTimer() {
+  if (state.focusTimer.running) return;
+  if (state.focusTimer.remaining <= 0) {
+    state.focusTimer.remaining = state.focusTimer.mode === 'work' ? state.focusTimer.workMin * 60 : state.focusTimer.breakMin * 60;
+  }
+  state.focusTimer.running = true;
+  focusTimerInterval = setInterval(() => {
+    state.focusTimer.remaining--;
+    if (state.focusTimer.remaining <= 0) {
+      state.focusTimer.running = false;
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+      playTimerBeep();
+      state.focusTimer.mode = state.focusTimer.mode === 'work' ? 'break' : 'work';
+      state.focusTimer.remaining = 0;
+      if (state.currentPage === 'focus') renderView();
+    }
+    if (state.currentPage === 'focus') updateTimerDisplay();
+  }, 1000);
+}
+
+function pauseFocusTimer() {
+  state.focusTimer.running = false;
+  clearInterval(focusTimerInterval);
+  focusTimerInterval = null;
+}
+
+function resetFocusTimer() {
+  pauseFocusTimer();
+  state.focusTimer.remaining = state.focusTimer.mode === 'work' ? state.focusTimer.workMin * 60 : state.focusTimer.breakMin * 60;
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('focus-timer-display');
+  if (el) {
+    const m = Math.floor(state.focusTimer.remaining / 60);
+    const s = state.focusTimer.remaining % 60;
+    el.textContent = `${pad(m)}:${pad(s)}`;
+  }
+}
+
+function playTimerBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 800; gain.gain.value = 0.3;
+    osc.start(); osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+
+// ── Subtasks ──
+let _subtaskCounter = 0;
+function addSubtask(eventId, text) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  if (!ev.subtasks) ev.subtasks = [];
+  ev.subtasks.push({ id: 'st_' + Date.now() + '_' + (++_subtaskCounter), text: text.trim(), done: false });
+  saveEvents();
+}
+
+function toggleSubtask(eventId, subtaskId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev || !ev.subtasks) return;
+  const st = ev.subtasks.find(s => s.id === subtaskId);
+  if (st) st.done = !st.done;
+  saveEvents();
+}
+
+function removeSubtask(eventId, subtaskId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev || !ev.subtasks) return;
+  ev.subtasks = ev.subtasks.filter(s => s.id !== subtaskId);
+  saveEvents();
+}
+
+function getSubtaskProgress(ev) {
+  if (!ev.subtasks || ev.subtasks.length === 0) return null;
+  const done = ev.subtasks.filter(s => s.done).length;
+  return { done, total: ev.subtasks.length };
+}
+
+// ── AI Prompt Builder (Etsy "Copy for AI") ──
+function buildAIPrompt(action) {
+  const ds = todayStr();
+  const budget = calculateDayBudget(ds);
+  const weekStart = getMonday(new Date());
+  const weekBudget = calculateWeekBudget(weekStart);
+  const score = calculateBalanceScore(weekStart);
+
+  let prompt = `I use LifeBalance Planner to manage my time across life categories.\n\n`;
+  prompt += `## My Life Categories & Weekly Goals\n`;
+  const activeGoals = state.goals.filter(g => g.active);
+  if (activeGoals.length) {
+    activeGoals.forEach(g => {
+      const actual = Math.round((weekBudget.categoryTotals[g.category] || 0) / 60 * 10) / 10;
+      prompt += `- ${CATEGORIES[g.category]?.label || g.category}: ${actual}h actual / ${g.targetHoursPerWeek}h goal\n`;
+    });
+  } else {
+    prompt += `(No goals set yet)\n`;
+  }
+  if (score !== null) prompt += `\nLife Balance Score: ${score}/100\n`;
+
+  prompt += `\n## Today's Schedule (${ds})\n`;
+  const dayEvents = getEventsWithRecurrences(ds, ds).filter(e => e.type !== 'task');
+  if (dayEvents.length) {
+    dayEvents.sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime));
+    dayEvents.forEach(e => {
+      const time = e.allDay ? 'All day' : `${formatTime12(e.startTime)}-${formatTime12(e.endTime)}`;
+      prompt += `- ${time}: ${e.title} [${CATEGORIES[e.category]?.label || e.category}]\n`;
+    });
+  } else {
+    prompt += `No events scheduled.\n`;
+  }
+
+  const tasks = state.events.filter(e => e.type === 'task' && !e.completed);
+  if (tasks.length) {
+    prompt += `\n## Pending Tasks\n`;
+    tasks.slice(0, 10).forEach(t => {
+      prompt += `- ${t.title} (${t.priority || 'medium'} priority, due ${t.date}) [${CATEGORIES[t.category]?.label || t.category}]\n`;
+    });
+  }
+
+  const activeHabits = state.habits.filter(h => h.status === 'active');
+  if (activeHabits.length) {
+    prompt += `\n## Habits\n`;
+    activeHabits.forEach(h => {
+      const streak = getHabitStreak(h.id);
+      const entry = getHabitLogEntry(h.id, ds);
+      const status = entry?.status === 'completed' ? 'done today' : 'not done';
+      prompt += `- ${h.name}: ${h.targetFrequency.type}, ${h.duration}min, streak ${streak}d, ${status}\n`;
+    });
+  }
+
+  if (action === 'plan-week') {
+    prompt += `\n## Request\nPlease analyze my week and suggest specific schedule improvements to better match my goals. For each suggestion, explain what to change and why.\n`;
+  } else if (action === 'fix-habits') {
+    prompt += `\n## Request\nLook at my habits and schedule. Where am I struggling? Suggest specific time slots and strategies to build consistency.\n`;
+  } else if (action === 'rebalance') {
+    prompt += `\n## Request\nMy balance score is ${score !== null ? score : 'unknown'}/100. Which life areas need more time? Suggest specific events to add or rearrange this week.\n`;
+  } else {
+    const now = new Date();
+    prompt += `\n## Request\nIt's ${formatTime12(pad(now.getHours()) + ':' + pad(now.getMinutes()))} right now. What should I do next? Consider my schedule, pending tasks, and incomplete habits.\n`;
+  }
+
+  return prompt;
+}
+
+function copyAIPrompt(action) {
+  const prompt = buildAIPrompt(action);
+  navigator.clipboard.writeText(prompt).then(() => {
+    showToast('Prompt copied! Paste it into ChatGPT or Claude.', 'success');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = prompt; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Prompt copied! Paste it into ChatGPT or Claude.', 'success');
+  });
+}
+
 // ── Budget & Balance Calculations ──
 function calculateDayBudget(ds) {
   const allEvents = getEventsWithRecurrences(ds, ds);
@@ -707,6 +983,12 @@ function updateHeading() {
   if (state.currentPage === 'tasks') { headingEl.textContent = 'Tasks'; return; }
   if (state.currentPage === 'goals') { headingEl.textContent = 'Goals'; return; }
   if (state.currentPage === 'habits') { headingEl.textContent = 'Habits'; return; }
+  if (state.currentPage === 'braindump') { headingEl.textContent = 'Brain Dump'; return; }
+  if (state.currentPage === 'focus') { headingEl.textContent = 'Focus Timer'; return; }
+  if (state.currentPage === 'budget') { headingEl.textContent = 'Budget'; return; }
+  if (state.currentPage === 'mealplan') { headingEl.textContent = 'Meal Plan'; return; }
+  if (state.currentPage === 'journal') { headingEl.textContent = 'Journal'; return; }
+  if (state.currentPage === 'about') { headingEl.textContent = 'About'; return; }
   if (state.currentPage === 'settings') { headingEl.textContent = 'Settings'; return; }
   if (state.currentPage === 'categories') { headingEl.textContent = 'Manage Categories'; return; }
   switch (state.currentView) {
@@ -771,6 +1053,12 @@ function renderView() {
     case 'tasks': renderTasksView(); break;
     case 'habits': renderHabitsView(); break;
     case 'goals': renderGoalsView(); break;
+    case 'braindump': renderBrainDumpView(); break;
+    case 'focus': renderFocusView(); break;
+    case 'budget': renderBudgetView(); break;
+    case 'mealplan': renderMealPlanView(); break;
+    case 'journal': renderJournalView(); break;
+    case 'about': renderAboutView(); break;
     case 'settings': renderSettingsView(); break;
     case 'categories': renderCategoriesView(); break;
     case 'calendar':
@@ -1371,6 +1659,7 @@ function renderTasksView() {
       ${tasks.map(t => {
         const cat = catStyle(t.category);
         const prioClass = t.priority === 'high' ? 'prio-high' : t.priority === 'medium' ? 'prio-med' : 'prio-low';
+        const stProg = getSubtaskProgress(t.id);
         return `<div class="task-row ${t.completed ? 'completed' : ''}">
           <label class="task-check-label">
             <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTask('${t.id}')">
@@ -1382,6 +1671,7 @@ function renderTasksView() {
               <span class="task-cat-dot" style="background:${cat.color}"></span>
               ${t.date}
               ${t.priority ? `<span class="task-prio ${prioClass}">${t.priority}</span>` : ''}
+              ${stProg ? `<span class="subtask-badge">${stProg.done}/${stProg.total}</span>` : ''}
             </span>
           </div>
         </div>`;
@@ -1431,6 +1721,22 @@ function renderGoalsView() {
           </div>
         </div>`;
       }).join('')}
+    </div>
+    <h3 class="goals-subtitle">Big Picture Goals</h3>
+    <p class="goals-desc">Write your top goals at each level. Monthly goals should support quarterly, which support yearly.</p>
+    <div class="goal-hierarchy">
+      <div class="goal-tier">
+        <label class="goal-tier-label">Yearly Goals</label>
+        <textarea class="goal-tier-input" placeholder="What do you want to accomplish this year?" onchange="updateGoalHierarchy('yearly',this.value)">${esc(state.goalHierarchy.yearly || '')}</textarea>
+      </div>
+      <div class="goal-tier">
+        <label class="goal-tier-label">This Quarter</label>
+        <textarea class="goal-tier-input" placeholder="Top 3 priorities this quarter..." onchange="updateGoalHierarchy('quarterly',this.value)">${esc(state.goalHierarchy.quarterly || '')}</textarea>
+      </div>
+      <div class="goal-tier">
+        <label class="goal-tier-label">This Month</label>
+        <textarea class="goal-tier-input" placeholder="Key actions for this month..." onchange="updateGoalHierarchy('monthly',this.value)">${esc(state.goalHierarchy.monthly || '')}</textarea>
+      </div>
     </div>
   `;
   viewEl.appendChild(wrap);
@@ -1704,7 +2010,7 @@ function renderHabitsView() {
           </span>
         </div>
         <div class="habit-today-actions">
-          ${status === 'pending' ? `<button class="btn btn-ghost btn-xs" onclick="quickLogHabit('${h.id}','${ds}','skipped')">Skip</button>` : `<span class="habit-status-badge habit-status-${status}">${status}</span>`}
+          ${status === 'pending' ? `<button class="btn btn-ghost btn-xs" onclick="quickLogHabit('${h.id}','${ds}','skipped')" title="Skip without breaking your streak">Skip</button>` : `<span class="habit-status-badge habit-status-${status}">${status === 'skipped' ? 'skipped (streak safe)' : status}</span>`}
         </div>
       </div>`;
     });
@@ -1753,6 +2059,10 @@ function renderHabitsView() {
 
 function quickLogHabit(habitId, ds, status) {
   logHabitCompletion(habitId, ds, status);
+  if (status === 'skipped') {
+    const streak = getHabitStreak(habitId);
+    showToast(streak > 0 ? `Skipped - your ${streak}-day streak is safe!` : 'Skipped - rest days are part of the plan.');
+  }
   renderView();
 }
 
@@ -1876,6 +2186,301 @@ function openHabitEditor(editId) {
   });
 }
 
+// ── Brain Dump View ──
+function renderBrainDumpView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  let html = `<div class="habits-header"><h2 class="habits-title">Brain Dump</h2></div>
+    <p class="dash-score-explain">Capture every thought. Turn the important ones into tasks.</p>
+    <div class="brain-dump-input-row">
+      <input type="text" id="brain-dump-input" class="setting-input" style="flex:1" placeholder="What's on your mind?" maxlength="200">
+      <button class="btn btn-primary btn-sm" id="brain-dump-add">Add</button>
+    </div>
+    <div class="brain-dump-list">`;
+  state.brainDump.forEach(item => {
+    html += `<div class="brain-dump-item">
+      <span class="brain-dump-text">${esc(item.text)}</span>
+      <div class="brain-dump-actions">
+        <button class="btn btn-ghost btn-xs" onclick="brainDumpToTask(state.brainDump.find(i=>i.id==='${item.id}'))">→ Task</button>
+        <button class="btn btn-ghost btn-xs" onclick="removeBrainDumpItem('${item.id}');renderView()">✕</button>
+      </div>
+    </div>`;
+  });
+  if (!state.brainDump.length) html += '<p class="dash-empty">Empty mind? Add thoughts above.</p>';
+  html += '</div>';
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+  const input = document.getElementById('brain-dump-input');
+  const addBtn = document.getElementById('brain-dump-add');
+  const doAdd = () => { addBrainDumpItem(input.value); input.value = ''; renderView(); };
+  addBtn.addEventListener('click', doAdd);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
+  input.focus();
+}
+
+// ── Focus Timer View ──
+function renderFocusView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  const remaining = state.focusTimer.remaining || (state.focusTimer.mode === 'work' ? state.focusTimer.workMin * 60 : state.focusTimer.breakMin * 60);
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  const modeLabel = state.focusTimer.mode === 'work' ? 'Focus Time' : 'Break Time';
+
+  const nextEvent = getEventsWithRecurrences(todayStr(), todayStr())
+    .filter(e => e.type !== 'task' && !e.allDay && timeToMin(e.startTime) > timeToMin(pad(new Date().getHours()) + ':' + pad(new Date().getMinutes())))
+    .sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime))[0];
+
+  let html = `<div class="focus-timer-page">
+    <h2 class="habits-title">${modeLabel}</h2>
+    <div class="focus-timer-circle"><span id="focus-timer-display" class="focus-timer-display">${pad(m)}:${pad(s)}</span></div>
+    <div class="focus-timer-controls">
+      ${state.focusTimer.running
+        ? '<button class="btn btn-primary" onclick="pauseFocusTimer();renderView()">Pause</button>'
+        : '<button class="btn btn-primary" onclick="startFocusTimer();renderView()">Start</button>'}
+      <button class="btn btn-ghost" onclick="resetFocusTimer();renderView()">Reset</button>
+      <button class="btn btn-ghost" onclick="state.focusTimer.mode=state.focusTimer.mode==='work'?'break':'work';resetFocusTimer();renderView()">${state.focusTimer.mode === 'work' ? 'Switch to Break' : 'Switch to Focus'}</button>
+    </div>
+    <div class="focus-timer-settings">
+      <label>Focus: <input type="number" min="1" max="120" value="${state.focusTimer.workMin}" class="setting-input" style="width:60px" onchange="state.focusTimer.workMin=parseInt(this.value)||25;resetFocusTimer();renderView()"> min</label>
+      <label>Break: <input type="number" min="1" max="60" value="${state.focusTimer.breakMin}" class="setting-input" style="width:60px" onchange="state.focusTimer.breakMin=parseInt(this.value)||5;resetFocusTimer();renderView()"> min</label>
+    </div>`;
+  if (nextEvent) {
+    const minsUntil = timeToMin(nextEvent.startTime) - timeToMin(pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()));
+    html += `<div class="focus-next-event"><strong>Next:</strong> ${esc(nextEvent.title)} in ${minsUntil} min (${formatTime12(nextEvent.startTime)})</div>`;
+  }
+  html += `<button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="renderOneThingNow()">One Thing Now</button>`;
+  html += `</div>`;
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+}
+
+function renderOneThingNow() {
+  viewEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view one-thing-now';
+  const ds = todayStr();
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const currentEvents = getEventsWithRecurrences(ds, ds).filter(e =>
+    e.type !== 'task' && !e.allDay && timeToMin(e.startTime) <= nowMin && timeToMin(e.endTime) > nowMin
+  );
+  const nextEvents = getEventsWithRecurrences(ds, ds).filter(e =>
+    e.type !== 'task' && !e.allDay && timeToMin(e.startTime) > nowMin
+  ).sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime));
+
+  const pendingTasks = state.events.filter(e => e.type === 'task' && !e.completed).sort((a, b) => {
+    const prio = { high: 0, medium: 1, low: 2 };
+    return (prio[a.priority] || 1) - (prio[b.priority] || 1);
+  });
+
+  let html = '<div class="one-thing-container">';
+  if (currentEvents.length) {
+    html += `<div class="one-thing-current"><span class="one-thing-label">Right now</span><h1 class="one-thing-title">${esc(currentEvents[0].title)}</h1><p>${formatTime12(currentEvents[0].startTime)} – ${formatTime12(currentEvents[0].endTime)}</p></div>`;
+  } else if (pendingTasks.length) {
+    html += `<div class="one-thing-current"><span class="one-thing-label">Focus on</span><h1 class="one-thing-title">${esc(pendingTasks[0].title)}</h1><p>${pendingTasks[0].priority} priority</p></div>`;
+  } else {
+    html += `<div class="one-thing-current"><span class="one-thing-label">You're free</span><h1 class="one-thing-title">No tasks right now</h1></div>`;
+  }
+  if (nextEvents.length) {
+    const minsUntil = timeToMin(nextEvents[0].startTime) - nowMin;
+    html += `<div class="one-thing-next"><strong>Next:</strong> ${esc(nextEvents[0].title)} in ${minsUntil} min</div>`;
+  }
+  html += `<button class="btn btn-ghost" style="margin-top:24px" onclick="switchPage('focus')">Back to Timer</button>`;
+  html += '</div>';
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+}
+
+// ── Budget View ──
+function renderBudgetView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const selectedMonth = state._budgetMonth || currentMonth;
+  const totals = getBudgetTotals(selectedMonth);
+
+  let html = `<div class="habits-header"><h2 class="habits-title">Budget</h2>
+    <input type="month" class="setting-input" value="${selectedMonth}" onchange="state._budgetMonth=this.value;renderView()">
+  </div>
+  <div class="budget-summary">
+    <div class="budget-summary-item budget-income"><span>Income</span><strong>$${totals.income.toFixed(2)}</strong></div>
+    <div class="budget-summary-item budget-expense"><span>Expenses</span><strong>$${totals.expenses.toFixed(2)}</strong></div>
+    <div class="budget-summary-item ${totals.balance >= 0 ? 'budget-positive' : 'budget-negative'}"><span>Balance</span><strong>$${totals.balance.toFixed(2)}</strong></div>
+  </div>
+  <div class="budget-add-row">
+    <select id="budget-type" class="setting-input"><option value="income">Income</option><option value="expense">Expense</option></select>
+    <input type="text" id="budget-desc" class="setting-input" placeholder="Description" maxlength="100" style="flex:1">
+    <input type="number" id="budget-amount" class="setting-input" placeholder="Amount" min="0" step="0.01" style="width:100px">
+    <button class="btn btn-primary btn-sm" id="budget-add-btn">Add</button>
+  </div>
+  <div class="budget-list">`;
+  totals.items.forEach(item => {
+    const sign = item.type === 'income' ? '+' : '-';
+    html += `<div class="budget-item ${item.type}">
+      <span class="budget-item-desc">${esc(item.description)}</span>
+      <span class="budget-item-amount">${sign}$${item.amount.toFixed(2)}</span>
+      <button class="btn btn-ghost btn-xs" onclick="removeBudgetItem('${item.id}');renderView()">✕</button>
+    </div>`;
+  });
+  if (!totals.items.length) html += '<p class="dash-empty">No entries for this month.</p>';
+  html += '</div>';
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+
+  document.getElementById('budget-add-btn').addEventListener('click', () => {
+    const desc = document.getElementById('budget-desc').value;
+    const amount = parseFloat(document.getElementById('budget-amount').value);
+    const type = document.getElementById('budget-type').value;
+    if (!desc.trim() || isNaN(amount) || amount <= 0) { showToast('Enter description and amount', 'error'); return; }
+    addBudgetItem(selectedMonth, type, desc, amount);
+    renderView();
+  });
+}
+
+// ── Meal Planner View ──
+function renderMealPlanView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  const weekStart = getMonday(state.currentDate);
+  const weekKey = dateStr(weekStart);
+  const slots = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+  let html = `<div class="habits-header"><h2 class="habits-title">Meal Plan</h2>
+    <span class="dash-date">${dateStr(weekStart)} – ${dateStr(addDays(weekStart, 6))}</span>
+  </div>
+  <div class="meal-plan-grid"><table class="meal-table"><thead><tr><th></th>`;
+  for (let i = 0; i < 7; i++) html += `<th>${DAYS_SHORT[i]}</th>`;
+  html += '</tr></thead><tbody>';
+  slots.forEach(slot => {
+    html += `<tr><td class="meal-slot-label">${slot.charAt(0).toUpperCase() + slot.slice(1)}</td>`;
+    for (let i = 0; i < 7; i++) {
+      const day = dateStr(addDays(weekStart, i));
+      const meal = state.mealPlan[weekKey]?.[day]?.[slot] || { meal: '', ingredients: '' };
+      html += `<td><input class="meal-input" data-week="${weekKey}" data-day="${day}" data-slot="${slot}" data-field="meal" value="${esc(meal.meal)}" placeholder="Meal"><input class="meal-input meal-ing" data-week="${weekKey}" data-day="${day}" data-slot="${slot}" data-field="ingredients" value="${esc(meal.ingredients)}" placeholder="Ingredients"></td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  const groceries = getGroceryList(weekKey);
+  html += `<div class="dash-card" style="margin-top:16px"><h3 class="dash-card-title">Grocery List <button class="btn btn-ghost btn-xs" id="copy-grocery">Copy</button></h3><div class="grocery-list">`;
+  if (groceries.length) {
+    groceries.forEach(g => { html += `<div class="grocery-item"><span>${esc(g.name)}</span>${g.count > 1 ? `<span class="grocery-count">×${g.count}</span>` : ''}</div>`; });
+  } else {
+    html += '<p class="dash-empty">Add ingredients to meals above.</p>';
+  }
+  html += '</div></div>';
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+
+  wrap.querySelectorAll('.meal-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const { week, day, slot, field } = input.dataset;
+      const current = state.mealPlan[week]?.[day]?.[slot] || { meal: '', ingredients: '' };
+      current[field] = input.value;
+      setMeal(week, day, slot, current.meal, current.ingredients);
+      renderView();
+    });
+  });
+
+  const copyBtn = document.getElementById('copy-grocery');
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    const text = groceries.map(g => `${g.name}${g.count > 1 ? ' ×' + g.count : ''}`).join('\n');
+    navigator.clipboard.writeText(text).then(() => showToast('Grocery list copied!', 'success')).catch(() => showToast('Copy failed', 'error'));
+  });
+}
+
+// ── Journal View ──
+function renderJournalView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  const ds = dateStr(state.currentDate);
+  const entry = getJournalEntry(ds);
+
+  let html = `<div class="habits-header"><h2 class="habits-title">Journal</h2><span class="dash-date">${ds}</span></div>
+    <div class="dash-card"><h3 class="dash-card-title">Gratitude</h3>
+      <p class="dash-score-explain">Three things you're grateful for today.</p>
+      <input class="setting-input journal-gratitude" data-idx="0" value="${esc(entry.gratitude[0] || '')}" placeholder="1. " style="width:100%;margin-bottom:6px">
+      <input class="setting-input journal-gratitude" data-idx="1" value="${esc(entry.gratitude[1] || '')}" placeholder="2. " style="width:100%;margin-bottom:6px">
+      <input class="setting-input journal-gratitude" data-idx="2" value="${esc(entry.gratitude[2] || '')}" placeholder="3. " style="width:100%">
+    </div>
+    <div class="dash-card"><h3 class="dash-card-title">Notes</h3>
+      <textarea class="setting-input journal-notes" rows="5" placeholder="How was your day?" style="width:100%">${esc(entry.notes || '')}</textarea>
+    </div>`;
+
+  const dayOfWeek = new Date(ds + 'T00:00:00').getDay();
+  if (dayOfWeek === 0) {
+    const weekStart = getMonday(addDays(new Date(ds + 'T00:00:00'), -1));
+    const score = calculateBalanceScore(weekStart);
+    const habitsCompleted = state.habitLog.filter(l => l.date >= dateStr(weekStart) && l.date <= ds && l.status === 'completed').length;
+    html += `<div class="dash-card"><h3 class="dash-card-title">Weekly Review</h3>
+      <p>Balance Score: <strong>${score !== null ? score + '/100' : 'N/A'}</strong></p>
+      <p>Habits completed this week: <strong>${habitsCompleted}</strong></p>
+      <textarea class="setting-input journal-review" rows="3" placeholder="What went well?" style="width:100%;margin-bottom:6px">${esc(entry.review || '')}</textarea>
+      <textarea class="setting-input journal-improve" rows="3" placeholder="What to improve?" style="width:100%">${esc(entry.improve || '')}</textarea>
+    </div>`;
+  }
+
+  html += `<div class="dash-card"><h3 class="dash-card-title">Energy & Mood</h3>
+    <div class="energy-mood-row">`;
+  const eLog = getEnergyForDate(ds);
+  const curEnergy = eLog?.energy || 0;
+  const curMood = eLog?.mood || 0;
+  const energyEmoji = ['', '😴', '🙁', '😐', '😊', '⚡'];
+  const moodEmoji = ['', '😢', '😕', '😐', '🙂', '😄'];
+  html += `<div class="energy-picker"><span>Energy:</span><div class="emoji-row">`;
+  for (let i = 1; i <= 5; i++) html += `<button class="emoji-btn ${curEnergy===i?'selected':''}" onclick="logEnergy('${ds}',${i},${curMood||3});renderView()">${energyEmoji[i]}</button>`;
+  html += `</div></div><div class="energy-picker"><span>Mood:</span><div class="emoji-row">`;
+  for (let i = 1; i <= 5; i++) html += `<button class="emoji-btn ${curMood===i?'selected':''}" onclick="logEnergy('${ds}',${curEnergy||3},${i});renderView()">${moodEmoji[i]}</button>`;
+  html += `</div></div></div></div>`;
+
+  wrap.innerHTML = html;
+  viewEl.appendChild(wrap);
+
+  const saveJournalDebounced = () => {
+    const gratitude = Array.from(wrap.querySelectorAll('.journal-gratitude')).map(el => el.value);
+    const notes = wrap.querySelector('.journal-notes')?.value || '';
+    const review = wrap.querySelector('.journal-review')?.value || '';
+    const improve = wrap.querySelector('.journal-improve')?.value || '';
+    setJournalEntry(ds, { gratitude, notes, review, improve });
+  };
+  wrap.querySelectorAll('.journal-gratitude, .journal-notes, .journal-review, .journal-improve').forEach(el => {
+    el.addEventListener('input', saveJournalDebounced);
+  });
+}
+
+// ── About / Help Page ──
+function renderAboutView() {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-view';
+  const isEtsy = LB_EDITION === 'etsy';
+  wrap.innerHTML = `
+    <h2 class="settings-title">About LifeBalance Planner</h2>
+    <div class="settings-list">
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">Version</span></div><span>7.0.0</span></div>
+      <div class="setting-row"><div class="setting-info">
+        <span class="setting-label">How Your Data Is Saved</span>
+        <span class="setting-desc">All data is stored in your browser's local storage. It stays on your device — nothing is sent to any server.${isEtsy ? ' If you move the file, switch browsers, or clear browser data, your data won\'t carry over. Export backups regularly!' : ''}</span>
+      </div></div>
+      <div class="setting-row"><div class="setting-info">
+        <span class="setting-label">How to Back Up</span>
+        <span class="setting-desc">Go to Settings → Export Backup. Save the .json file somewhere safe. To restore, use Settings → Import Backup.</span>
+      </div></div>
+      <div class="setting-row"><div class="setting-info">
+        <span class="setting-label">Browser Support</span>
+        <span class="setting-desc">Chrome, Edge, Firefox, Safari. Best on desktop. Works on tablets too.</span>
+      </div></div>
+      ${isEtsy ? `<div class="setting-row"><div class="setting-info">
+        <span class="setting-label">Need Help?</span>
+        <span class="setting-desc">Contact us via Etsy messages for support.</span>
+      </div></div>` : ''}
+    </div>`;
+  viewEl.appendChild(wrap);
+}
+
 // ── Settings View ──
 function renderSettingsView() {
   const wrap = document.createElement('div');
@@ -1917,6 +2522,19 @@ function renderSettingsView() {
         </div>
         <label class="toggle-label"><input type="checkbox" id="dark-mode-toggle" ${state.darkMode ? 'checked' : ''}><span class="toggle-switch"></span></label>
       </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Color Theme</span>
+          <span class="setting-desc">Choose an aesthetic color scheme</span>
+        </div>
+        <select class="setting-input" id="theme-select" onchange="setColorTheme(this.value)">
+          <option value="default" ${(state.preferences.colorTheme||'default')==='default'?'selected':''}>Default</option>
+          <option value="sage" ${state.preferences.colorTheme==='sage'?'selected':''}>Sage</option>
+          <option value="blush" ${state.preferences.colorTheme==='blush'?'selected':''}>Blush Pink</option>
+          <option value="ocean" ${state.preferences.colorTheme==='ocean'?'selected':''}>Ocean</option>
+          <option value="minimal" ${state.preferences.colorTheme==='minimal'?'selected':''}>Minimal Black</option>
+        </select>
+      </div>
     </div>
     <h3 class="settings-subtitle">Data Management</h3>
     <div class="settings-list">
@@ -1937,8 +2555,8 @@ function renderSettingsView() {
       </div>
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">Export Calendar (.ics)</span>
-          <span class="setting-desc">Download events in iCalendar format for Google Calendar / Outlook</span>
+          <span class="setting-label">Add to Google / Apple / Outlook Calendar</span>
+          <span class="setting-desc">Export events as .ics file for import into other calendar apps</span>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="exportICS()">Export .ics</button>
       </div>
@@ -1956,6 +2574,19 @@ function renderSettingsView() {
         <button class="btn btn-ghost btn-sm" onclick="loadDemoData();renderView();showToast('Sample data loaded!','success')">Load Sample Data</button>
       </div>`}
     </div>
+    ${LB_EDITION === 'etsy' ? `
+    <h3 class="settings-subtitle">Starter Templates</h3>
+    <p class="setting-desc" style="margin-bottom:8px">Load a pre-built schedule template. Your existing data is kept.</p>
+    <div class="settings-list">
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">ADHD-Friendly</span><span class="setting-desc">Short blocks, transitions, and brain dump routine</span></div><button class="btn btn-ghost btn-sm" onclick="document.getElementById('template-file-input').click();document.getElementById('template-file-input').dataset.hint='adhd'">Load</button></div>
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">Student</span><span class="setting-desc">Class blocks, study sessions, and campus life</span></div><button class="btn btn-ghost btn-sm" onclick="document.getElementById('template-file-input').click()">Load</button></div>
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">Working Parent</span><span class="setting-desc">Work-life balance with family routines</span></div><button class="btn btn-ghost btn-sm" onclick="document.getElementById('template-file-input').click()">Load</button></div>
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">Faith & Prayer</span><span class="setting-desc">Prayer times, study, and community</span></div><button class="btn btn-ghost btn-sm" onclick="document.getElementById('template-file-input').click()">Load</button></div>
+      <div class="setting-row"><div class="setting-info"><span class="setting-label">Fitness</span><span class="setting-desc">Training schedule, meal prep, and recovery</span></div><button class="btn btn-ghost btn-sm" onclick="document.getElementById('template-file-input').click()">Load</button></div>
+    </div>
+    <p class="setting-desc" style="margin-top:4px">Or import any .json template file from the Starter-Templates.zip included in your download.</p>
+    <input type="file" id="template-file-input" accept=".json" style="display:none" onchange="if(this.files[0]) importBackup(this.files[0]); this.value='';">
+    ` : ''}
   `;
   viewEl.appendChild(wrap);
   const dmToggle = document.getElementById('dark-mode-toggle');
@@ -1966,7 +2597,23 @@ function toggleDarkMode(on) {
   state.darkMode = on;
   state.preferences.darkMode = on;
   savePreferences();
-  document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+  applyThemeAttributes();
+}
+
+function setColorTheme(theme) {
+  state.preferences.colorTheme = theme;
+  savePreferences();
+  applyThemeAttributes();
+}
+
+function applyThemeAttributes() {
+  try {
+    const el = document.documentElement;
+    if (el && el.setAttribute) {
+      el.setAttribute('data-theme', state.darkMode ? 'dark' : 'light');
+      el.setAttribute('data-color-theme', state.preferences.colorTheme || 'default');
+    }
+  } catch {}
 }
 
 function updatePref(key, value) {
@@ -2052,6 +2699,7 @@ function openModal(ds, eventId, startTime, allDay, type) {
   renderCatPicker();
   renderRecurrenceUI();
   renderFlexibilityUI();
+  renderSubtasksUI();
   modalEl.classList.remove('hidden');
   document.addEventListener('keydown', trapFocus);
   fTitle.focus();
@@ -2147,6 +2795,35 @@ function renderFlexibilityUI() {
       renderFlexibilityUI();
     });
   });
+}
+
+function renderSubtasksUI() {
+  let area = document.getElementById('subtasks-area');
+  if (!area) {
+    area = document.createElement('div');
+    area.id = 'subtasks-area';
+    area.className = 'form-group';
+    const descGroup = document.getElementById('event-desc').parentElement;
+    descGroup.parentElement.insertBefore(area, descGroup.nextSibling);
+  }
+  if (state.editingType !== 'task') { area.innerHTML = ''; return; }
+  const evId = state.editingEventId;
+  const ev = evId ? state.events.find(e => e.id === evId) : null;
+  const subs = ev?.subtasks || [];
+  area.innerHTML = `<label>Subtasks</label>
+    <div class="subtask-list">
+      ${subs.map(s => `<div class="subtask-item">
+        <label class="subtask-check"><input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtask('${evId}','${s.id}');renderSubtasksUI()"><span class="task-checkmark"></span></label>
+        <span class="subtask-text ${s.done ? 'done' : ''}">${esc(s.text)}</span>
+        <button type="button" class="subtask-remove" onclick="removeSubtask('${evId}','${s.id}');renderSubtasksUI()">&times;</button>
+      </div>`).join('')}
+    </div>
+    <div class="subtask-add">
+      <input type="text" id="subtask-input" placeholder="Add subtask..." class="setting-input" style="flex:1">
+      <button type="button" class="btn btn-sm" onclick="const inp=document.getElementById('subtask-input');if(inp.value.trim()){addSubtask('${evId}',inp.value);inp.value='';renderSubtasksUI()}">Add</button>
+    </div>`;
+  const inp = document.getElementById('subtask-input');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (inp.value.trim()) { addSubtask(evId, inp.value); inp.value = ''; renderSubtasksUI(); } } });
 }
 
 function closeModal() {
@@ -2348,6 +3025,26 @@ const aiState = {
 
 function openAIPanel() {
   const panel = $('ai-panel');
+  if (LB_EDITION === 'etsy') {
+    const actions = panel.querySelector('.ai-actions');
+    const cmdBar = panel.querySelector('.ai-command-bar');
+    if (cmdBar) cmdBar.style.display = 'none';
+    if (actions) {
+      actions.innerHTML = `
+        <button class="ai-action-btn" onclick="handlePlanDay()">Plan My Day</button>
+        <button class="ai-action-btn" onclick="handleWhatNow()">What Now?</button>
+        <div class="ai-divider"></div>
+        <p class="ai-copy-label">Copy a prompt to paste into ChatGPT or Claude:</p>
+        <button class="ai-action-btn ai-copy-btn" onclick="copyAIPrompt('plan-week')">Plan My Week</button>
+        <button class="ai-action-btn ai-copy-btn" onclick="copyAIPrompt('fix-habits')">Fix My Habits</button>
+        <button class="ai-action-btn ai-copy-btn" onclick="copyAIPrompt('rebalance')">Rebalance My Life</button>
+        <button class="ai-action-btn ai-copy-btn" onclick="copyAIPrompt('what-now')">What Now? (AI)</button>`;
+    }
+    const badge = $('ai-mode-badge');
+    if (badge) { badge.textContent = 'AI-Ready'; badge.classList.remove('hidden'); }
+    const title = panel.querySelector('.ai-panel-title-row h3');
+    if (title) title.textContent = 'LifeBalance Planner';
+  }
   panel.classList.remove('hidden');
   panel.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => panel.classList.add('open'));
@@ -2436,6 +3133,10 @@ function buildAIContext(action, targetDate, command) {
 }
 
 async function callAIPlanner(context) {
+  if (LB_EDITION === 'etsy') {
+    return generateFallbackSuggestions(context);
+  }
+
   const check = canMakeAIRequest();
   if (!check.ok) {
     renderAIError(check.reason);
@@ -2918,6 +3619,12 @@ function gatherAllData() {
     habits: state.habits,
     habitLog: state.habitLog,
     aiHistory: (() => { try { return JSON.parse(localStorage.getItem('chronosAIHistory') || '[]'); } catch { return []; } })(),
+    brainDump: state.brainDump,
+    energyLog: state.energyLog,
+    budgetItems: state.budgetItems,
+    mealPlan: state.mealPlan,
+    journal: state.journal,
+    goalHierarchy: state.goalHierarchy,
   };
 }
 
@@ -3027,6 +3734,12 @@ function applyImport(data) {
   if (data.aiHistory) {
     try { localStorage.setItem('chronosAIHistory', JSON.stringify(data.aiHistory)); } catch {}
   }
+  if (data.brainDump) { state.brainDump = data.brainDump; saveBrainDump(); }
+  if (data.energyLog) { state.energyLog = data.energyLog; saveEnergyLog(); }
+  if (data.budgetItems) { state.budgetItems = data.budgetItems; saveBudgetItems(); }
+  if (data.mealPlan) { state.mealPlan = data.mealPlan; saveMealPlan(); }
+  if (data.journal) { state.journal = data.journal; saveJournal(); }
+  if (data.goalHierarchy) { state.goalHierarchy = data.goalHierarchy; saveGoalHierarchy(); }
   renderAll();
   showToast('Backup imported successfully.', 'success');
 }
@@ -3218,12 +3931,29 @@ state.goals = loadGoals();
 state.preferences = loadPreferences();
 state.habits = loadHabits();
 state.habitLog = loadHabitLog();
+state.brainDump = loadBrainDump();
+state.energyLog = loadEnergyLog();
+state.budgetItems = loadBudgetItems();
+state.mealPlan = loadMealPlan();
+state.journal = loadJournal();
+state.goalHierarchy = loadGoalHierarchy();
 state.activeCategories = new Set(Object.keys(CATEGORIES));
 loadCommandHistory();
 state.darkMode = !!state.preferences.darkMode;
 if (state.darkMode) document.documentElement.setAttribute('data-theme', 'dark');
 else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && state.preferences.darkMode === undefined) {
   state.darkMode = true; document.documentElement.setAttribute('data-theme', 'dark');
+}
+applyThemeAttributes();
+if (LB_EDITION === 'etsy') {
+  const toolbarRight = document.querySelector('.toolbar-right');
+  if (toolbarRight) {
+    const bkBtn = document.createElement('button');
+    bkBtn.className = 'btn btn-sm backup-toolbar-btn';
+    bkBtn.textContent = 'Export Backup';
+    bkBtn.onclick = () => { const d = gatherAllData(); const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `lifebalance-backup-${dateStr(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href); showToast('Backup downloaded!'); };
+    toolbarRight.insertBefore(bkBtn, toolbarRight.firstChild);
+  }
 }
 state.currentPage = state.preferences.startPage || 'dashboard';
 document.querySelectorAll('.view-switcher button').forEach(b => b.classList.toggle('active', b.dataset.view === state.currentView));
@@ -3236,7 +3966,12 @@ setTimeout(showWelcome, 500);
 
 // ── Welcome / Onboarding ──
 function showWelcome() {
-  if (state.preferences.onboardingComplete) return;
+  if (state.preferences.onboardingComplete) {
+    if (LB_EDITION === 'etsy' && state.events.length === 0 && state.habits.length === 0) {
+      showToast('Planner is empty. Moved the file or changed browser? Import your backup from Settings.', 'warning', 'Import', () => switchPage('settings'));
+    }
+    return;
+  }
   const overlay = document.createElement('div');
   overlay.className = 'import-preview-overlay';
   overlay.id = 'welcome-overlay';
@@ -3245,10 +3980,10 @@ function showWelcome() {
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
-      <h2>Welcome to LifeBalance AI</h2>
+      <h2>Welcome to LifeBalance ${LB_EDITION === 'etsy' ? 'Planner' : 'AI'}</h2>
     </div>
-    <p class="welcome-tagline">Your time. Your priorities. Your life.</p>
-    <p class="welcome-desc">LifeBalance AI helps you plan your time around what matters most. Track how you spend time across life categories, set balance goals, build habits, and let AI suggest a better schedule.</p>
+    <p class="welcome-tagline">${LB_EDITION === 'etsy' ? 'The planner that tells you if your life plan is realistic.' : 'Your time. Your priorities. Your life.'}</p>
+    <p class="welcome-desc">${LB_EDITION === 'etsy' ? 'LifeBalance Planner helps you plan your time around what matters most. Track time across life categories, set balance goals, build habits, and get AI-ready prompts. Your data stays on this computer — export a backup weekly.' : 'LifeBalance AI helps you plan your time around what matters most. Track how you spend time across life categories, set balance goals, build habits, and let AI suggest a better schedule.'}</p>
     <div class="welcome-steps">
       <div class="welcome-step">
         <span class="welcome-step-num">1</span>
@@ -3358,6 +4093,15 @@ if (typeof module !== 'undefined' && module.exports) {
     deleteRecurringSingle, deleteRecurringFuture, deleteRecurringAll,
     isHabitDueOnDate, getHabitStreak, getHabitWeeklyCompletion, logHabitCompletion, getHabitLogEntry,
     loadHabits, saveHabits, loadHabitLog, saveHabitLog,
+    addBrainDumpItem, removeBrainDumpItem, loadBrainDump, saveBrainDump,
+    logEnergy, getEnergyForDate, loadEnergyLog, saveEnergyLog,
+    addBudgetItem, removeBudgetItem, getBudgetTotals, loadBudgetItems, saveBudgetItems,
+    setMeal, getGroceryList, loadMealPlan, saveMealPlan,
+    getJournalEntry, setJournalEntry, loadJournal, saveJournal,
+    addSubtask, toggleSubtask, removeSubtask, getSubtaskProgress,
+    loadGoalHierarchy, saveGoalHierarchy, updateGoalHierarchy,
+    startFocusTimer, pauseFocusTimer, resetFocusTimer,
+    buildAIPrompt, copyAIPrompt,
     getActiveCategories: () => CATEGORIES,
     CATEGORY_MIGRATION, DEFAULT_CATEGORIES,
     state,

@@ -1,0 +1,204 @@
+{
+  "version": 6,
+  "description": "Working Parent — work hours, school runs, family time, self-care",
+  "events": [
+    {
+      "id": "tpl_wp_1",
+      "title": "School Drop-off",
+      "date": "2026-10-06",
+      "startTime": "07:30",
+      "endTime": "08:00",
+      "allDay": false,
+      "category": "family",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_wp_2",
+      "title": "Work",
+      "date": "2026-10-06",
+      "startTime": "08:30",
+      "endTime": "16:30",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_wp_3",
+      "title": "School Pickup",
+      "date": "2026-10-06",
+      "startTime": "15:30",
+      "endTime": "16:00",
+      "allDay": false,
+      "category": "family",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_wp_4",
+      "title": "Family Dinner",
+      "date": "2026-10-06",
+      "startTime": "18:00",
+      "endTime": "19:00",
+      "allDay": false,
+      "category": "family",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_wp_5",
+      "title": "Kids Bedtime Routine",
+      "date": "2026-10-06",
+      "startTime": "19:30",
+      "endTime": "20:30",
+      "allDay": false,
+      "category": "family",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_wp_6",
+      "title": "Me Time",
+      "date": "2026-10-06",
+      "startTime": "20:30",
+      "endTime": "21:30",
+      "allDay": false,
+      "category": "entertainment",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    }
+  ],
+  "goals": [
+    {
+      "id": "tpl_wp_g1",
+      "title": "Work",
+      "category": "work-money",
+      "targetHoursPerWeek": 40,
+      "active": true
+    },
+    {
+      "id": "tpl_wp_g2",
+      "title": "Family",
+      "category": "family",
+      "targetHoursPerWeek": 25,
+      "active": true
+    },
+    {
+      "id": "tpl_wp_g3",
+      "title": "Self-care",
+      "category": "personal-other",
+      "targetHoursPerWeek": 5,
+      "active": true
+    }
+  ],
+  "habits": [
+    {
+      "id": "tpl_wp_h1",
+      "name": "Exercise",
+      "category": "personal-other",
+      "targetFrequency": {
+        "type": "custom",
+        "timesPerWeek": 3,
+        "daysOfWeek": [
+          0,
+          2,
+          4
+        ]
+      },
+      "duration": 30,
+      "priority": "medium",
+      "status": "active",
+      "startDate": "2026-10-06"
+    },
+    {
+      "id": "tpl_wp_h2",
+      "name": "Read with kids",
+      "category": "family",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 20,
+      "priority": "high",
+      "status": "active",
+      "startDate": "2026-10-06"
+    }
+  ],
+  "preferences": {
+    "sleepHours": 7,
+    "workHoursTarget": 8
+  },
+  "categories": null,
+  "habitLog": [],
+  "aiHistory": []
+}

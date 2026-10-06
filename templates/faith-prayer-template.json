@@ -1,0 +1,231 @@
+{
+  "version": 6,
+  "description": "Faith & Prayer — daily prayer times, scripture study, community service",
+  "events": [
+    {
+      "id": "tpl_fp_1",
+      "title": "Fajr / Morning Prayer",
+      "date": "2026-10-06",
+      "startTime": "05:30",
+      "endTime": "06:00",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_fp_2",
+      "title": "Scripture Study",
+      "date": "2026-10-06",
+      "startTime": "06:00",
+      "endTime": "06:30",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_fp_3",
+      "title": "Dhuhr / Midday Prayer",
+      "date": "2026-10-06",
+      "startTime": "12:30",
+      "endTime": "12:45",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_fp_4",
+      "title": "Asr / Afternoon Prayer",
+      "date": "2026-10-06",
+      "startTime": "15:30",
+      "endTime": "15:45",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_fp_5",
+      "title": "Maghrib / Evening Prayer",
+      "date": "2026-10-06",
+      "startTime": "18:30",
+      "endTime": "18:45",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_fp_6",
+      "title": "Isha / Night Prayer",
+      "date": "2026-10-06",
+      "startTime": "20:30",
+      "endTime": "20:45",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_fp_7",
+      "title": "Community Service",
+      "date": "2026-10-06",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "allDay": false,
+      "category": "faith",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          5
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    }
+  ],
+  "goals": [
+    {
+      "id": "tpl_fp_g1",
+      "title": "Faith",
+      "category": "faith",
+      "targetHoursPerWeek": 14,
+      "active": true
+    },
+    {
+      "id": "tpl_fp_g2",
+      "title": "Work",
+      "category": "work-money",
+      "targetHoursPerWeek": 40,
+      "active": true
+    },
+    {
+      "id": "tpl_fp_g3",
+      "title": "Family",
+      "category": "family",
+      "targetHoursPerWeek": 14,
+      "active": true
+    }
+  ],
+  "habits": [
+    {
+      "id": "tpl_fp_h1",
+      "name": "Morning dhikr / meditation",
+      "category": "faith",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 15,
+      "priority": "high",
+      "status": "active",
+      "startDate": "2026-10-06"
+    },
+    {
+      "id": "tpl_fp_h2",
+      "name": "Gratitude journal",
+      "category": "faith",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 5,
+      "priority": "medium",
+      "status": "active",
+      "startDate": "2026-10-06"
+    }
+  ],
+  "preferences": {
+    "sleepHours": 7,
+    "workHoursTarget": 8
+  },
+  "categories": null,
+  "habitLog": [],
+  "aiHistory": []
+}

@@ -1,0 +1,174 @@
+{
+  "version": 6,
+  "description": "Student schedule — classes, study blocks, social time",
+  "events": [
+    {
+      "id": "tpl_stu_1",
+      "title": "Morning Class",
+      "date": "2026-10-06",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          0,
+          2,
+          4
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_stu_2",
+      "title": "Study Block",
+      "date": "2026-10-06",
+      "startTime": "11:00",
+      "endTime": "13:00",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_stu_3",
+      "title": "Lunch with friends",
+      "date": "2026-10-06",
+      "startTime": "13:00",
+      "endTime": "14:00",
+      "allDay": false,
+      "category": "family",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_stu_4",
+      "title": "Afternoon Class",
+      "date": "2026-10-06",
+      "startTime": "14:00",
+      "endTime": "15:30",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          1,
+          3
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "fixed"
+    },
+    {
+      "id": "tpl_stu_5",
+      "title": "Exercise",
+      "date": "2026-10-06",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          0,
+          2,
+          4
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    }
+  ],
+  "goals": [
+    {
+      "id": "tpl_stu_g1",
+      "title": "Study",
+      "category": "work-money",
+      "targetHoursPerWeek": 25,
+      "active": true
+    },
+    {
+      "id": "tpl_stu_g2",
+      "title": "Social",
+      "category": "family",
+      "targetHoursPerWeek": 10,
+      "active": true
+    },
+    {
+      "id": "tpl_stu_g3",
+      "title": "Exercise",
+      "category": "personal-other",
+      "targetHoursPerWeek": 5,
+      "active": true
+    }
+  ],
+  "habits": [
+    {
+      "id": "tpl_stu_h1",
+      "name": "Review notes",
+      "category": "work-money",
+      "targetFrequency": {
+        "type": "weekdays",
+        "timesPerWeek": 5,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "duration": 30,
+      "priority": "high",
+      "status": "active",
+      "startDate": "2026-10-06"
+    }
+  ],
+  "preferences": {
+    "sleepHours": 8,
+    "workHoursTarget": 5
+  },
+  "categories": null,
+  "habitLog": [],
+  "aiHistory": []
+}

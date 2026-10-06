@@ -1,0 +1,199 @@
+{
+  "version": 6,
+  "description": "Fitness-focused week — workouts, meal prep, rest days, tracking",
+  "events": [
+    {
+      "id": "tpl_fit_1",
+      "title": "Strength Training",
+      "date": "2026-10-06",
+      "startTime": "06:00",
+      "endTime": "07:00",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          0,
+          2,
+          4
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_fit_2",
+      "title": "Cardio / Run",
+      "date": "2026-10-06",
+      "startTime": "06:00",
+      "endTime": "06:45",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          1,
+          3
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_fit_3",
+      "title": "Meal Prep",
+      "date": "2026-10-06",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "allDay": false,
+      "category": "food-meals",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          6
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_fit_4",
+      "title": "Active Recovery / Yoga",
+      "date": "2026-10-06",
+      "startTime": "07:00",
+      "endTime": "07:30",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekly",
+        "interval": 1,
+        "daysOfWeek": [
+          5
+        ],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    }
+  ],
+  "goals": [
+    {
+      "id": "tpl_fit_g1",
+      "title": "Exercise",
+      "category": "personal-other",
+      "targetHoursPerWeek": 7,
+      "active": true
+    },
+    {
+      "id": "tpl_fit_g2",
+      "title": "Meal prep",
+      "category": "food-meals",
+      "targetHoursPerWeek": 5,
+      "active": true
+    },
+    {
+      "id": "tpl_fit_g3",
+      "title": "Sleep",
+      "category": "sleep",
+      "targetHoursPerWeek": 56,
+      "active": true
+    }
+  ],
+  "habits": [
+    {
+      "id": "tpl_fit_h1",
+      "name": "Track meals",
+      "category": "food-meals",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 5,
+      "priority": "high",
+      "status": "active",
+      "startDate": "2026-10-06"
+    },
+    {
+      "id": "tpl_fit_h2",
+      "name": "Drink 3L water",
+      "category": "personal-other",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 5,
+      "priority": "medium",
+      "status": "active",
+      "startDate": "2026-10-06"
+    },
+    {
+      "id": "tpl_fit_h3",
+      "name": "Stretch / mobility",
+      "category": "personal-other",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 10,
+      "priority": "medium",
+      "status": "active",
+      "startDate": "2026-10-06"
+    }
+  ],
+  "preferences": {
+    "sleepHours": 8,
+    "workHoursTarget": 8
+  },
+  "categories": null,
+  "habitLog": [],
+  "aiHistory": []
+}

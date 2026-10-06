@@ -112,7 +112,7 @@ describe('backup does not contain secrets', () => {
   it('only contains expected top-level keys', () => {
     const data = gatherAllData();
     const keys = Object.keys(data).sort();
-    expect(keys).toEqual(['aiHistory', 'categories', 'events', 'exportedAt', 'goals', 'habitLog', 'habits', 'preferences', 'version'].sort());
+    expect(keys).toEqual(['aiHistory', 'brainDump', 'budgetItems', 'categories', 'energyLog', 'events', 'exportedAt', 'goalHierarchy', 'goals', 'habitLog', 'habits', 'journal', 'mealPlan', 'preferences', 'version'].sort());
   });
 });
 

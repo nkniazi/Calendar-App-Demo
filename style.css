@@ -2655,3 +2655,150 @@ button:focus:not(:focus-visible) { outline: none; }
   .rec-day-btn { width: 32px; height: 32px; font-size: 11px; }
   .flexibility-picker { flex-wrap: wrap; }
 }
+
+/* ── Sidebar section label ── */
+.sidebar-section-label {
+  display: block;
+  padding: 4px 20px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ── Brain Dump ── */
+.brain-dump-input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.brain-dump-list { display: flex; flex-direction: column; gap: 6px; }
+.brain-dump-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.brain-dump-text { flex: 1; font-size: 14px; }
+.brain-dump-actions { display: flex; gap: 4px; }
+
+/* ── Focus Timer ── */
+.focus-timer-page { text-align: center; max-width: 400px; margin: 0 auto; padding: 32px 16px; }
+.focus-timer-circle { width: 200px; height: 200px; border-radius: 50%; border: 4px solid var(--primary); display: flex; align-items: center; justify-content: center; margin: 24px auto; }
+.focus-timer-display { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.focus-timer-controls { display: flex; gap: 8px; justify-content: center; margin: 16px 0; }
+.focus-timer-settings { display: flex; gap: 16px; justify-content: center; margin: 16px 0; font-size: 13px; }
+.focus-timer-settings label { display: flex; align-items: center; gap: 4px; }
+.focus-next-event { margin-top: 16px; padding: 10px; background: var(--surface); border-radius: 8px; font-size: 13px; }
+
+/* ── One Thing Now ── */
+.one-thing-now { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
+.one-thing-container { text-align: center; max-width: 500px; }
+.one-thing-label { font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+.one-thing-title { font-size: 36px; font-weight: 700; margin: 8px 0 16px; }
+.one-thing-next { margin-top: 24px; padding: 12px; background: var(--surface); border-radius: 8px; font-size: 14px; }
+
+/* ── Budget ── */
+.budget-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.budget-summary-item { padding: 16px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); text-align: center; }
+.budget-summary-item span { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.budget-summary-item strong { font-size: 20px; }
+.budget-income strong { color: #10b981; }
+.budget-expense strong { color: #ef4444; }
+.budget-positive strong { color: #10b981; }
+.budget-negative strong { color: #ef4444; }
+.budget-add-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.budget-list { display: flex; flex-direction: column; gap: 4px; }
+.budget-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.budget-item-desc { flex: 1; font-size: 14px; }
+.budget-item-amount { font-weight: 600; font-size: 14px; }
+.budget-item.income .budget-item-amount { color: #10b981; }
+.budget-item.expense .budget-item-amount { color: #ef4444; }
+
+/* ── Meal Planner ── */
+.meal-plan-grid { overflow-x: auto; }
+.meal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.meal-table th, .meal-table td { border: 1px solid var(--border); padding: 4px; vertical-align: top; }
+.meal-table th { background: var(--surface); font-weight: 600; text-align: center; font-size: 12px; }
+.meal-slot-label { font-weight: 600; font-size: 12px; white-space: nowrap; padding-right: 8px !important; }
+.meal-input { width: 100%; border: none; background: transparent; padding: 3px 4px; font-size: 12px; outline: none; }
+.meal-input:focus { background: var(--primary-light, rgba(99,102,241,0.08)); }
+.meal-ing { font-size: 11px; color: var(--text-muted); }
+.grocery-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.grocery-item { padding: 4px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; font-size: 13px; display: flex; align-items: center; gap: 4px; }
+.grocery-count { font-size: 11px; color: var(--text-muted); }
+
+/* ── Journal ── */
+.energy-mood-row { display: flex; gap: 24px; flex-wrap: wrap; }
+.energy-picker { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.emoji-row { display: flex; gap: 4px; }
+.emoji-btn { width: 32px; height: 32px; border: 2px solid transparent; border-radius: 50%; background: var(--surface); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s; }
+.emoji-btn:hover { border-color: var(--primary); }
+.emoji-btn.selected { border-color: var(--primary); background: var(--primary-light, rgba(99,102,241,0.13)); }
+
+/* ── AI Copy for Etsy ── */
+.ai-divider { height: 1px; background: var(--border); margin: 8px 0; }
+.ai-copy-label { font-size: 12px; color: var(--text-muted); margin: 4px 0; }
+.ai-copy-btn { font-size: 12px !important; }
+
+/* ── Color Themes ── */
+:root[data-color-theme="sage"] {
+  --primary: #6b8f71;
+  --primary-hover: #5a7d60;
+}
+:root[data-color-theme="sage"][data-theme="dark"] {
+  --primary: #8ab391;
+  --primary-hover: #7aa381;
+}
+:root[data-color-theme="blush"] {
+  --primary: #d4849a;
+  --primary-hover: #c47389;
+}
+:root[data-color-theme="blush"][data-theme="dark"] {
+  --primary: #e6a0b4;
+  --primary-hover: #d990a4;
+}
+:root[data-color-theme="ocean"] {
+  --primary: #3b82c4;
+  --primary-hover: #2a6eb0;
+}
+:root[data-color-theme="ocean"][data-theme="dark"] {
+  --primary: #5ba0e0;
+  --primary-hover: #4a90d0;
+}
+:root[data-color-theme="minimal"] {
+  --primary: #333;
+  --primary-hover: #111;
+}
+:root[data-color-theme="minimal"][data-theme="dark"] {
+  --primary: #ccc;
+  --primary-hover: #eee;
+}
+
+/* ── Subtasks ── */
+.subtask-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.subtask-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+.subtask-check { display: flex; align-items: center; }
+.subtask-text { flex: 1; font-size: 0.9rem; }
+.subtask-text.done { text-decoration: line-through; opacity: 0.5; }
+.subtask-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; padding: 0 4px; line-height: 1; }
+.subtask-remove:hover { color: var(--error); }
+.subtask-add { display: flex; gap: 6px; align-items: center; }
+.subtask-badge { font-size: 0.75rem; background: var(--bg-tertiary); padding: 1px 6px; border-radius: 8px; }
+.backup-toolbar-btn { background: var(--success); color: #fff; border: none; border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; margin-right: 8px; white-space: nowrap; }
+.backup-toolbar-btn:hover { opacity: 0.9; }
+
+/* ── Goal Hierarchy ── */
+.goals-subtitle { margin-top: 24px; font-size: 1.1rem; color: var(--text); }
+.goal-hierarchy { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.goal-tier { display: flex; flex-direction: column; gap: 4px; }
+.goal-tier-label { font-weight: 600; font-size: 0.85rem; color: var(--primary); }
+.goal-tier-input { width: 100%; min-height: 60px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text); font-size: 0.9rem; resize: vertical; font-family: inherit; }
+.goal-tier-input:focus { outline: none; border-color: var(--primary); }
+
+/* ── Print CSS ── */
+@media print {
+  .sidebar, .sidebar-overlay, .toolbar, .ai-panel, .toast-container,
+  .skip-link, .modal-overlay, #new-event-btn, .sidebar-toggle-btn,
+  .btn, button { display: none !important; }
+  .main { margin: 0 !important; padding: 0 !important; }
+  .calendar-view { padding: 0 !important; }
+  body { font-size: 11pt; }
+  .time-view { break-inside: avoid; }
+  .dash-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc; }
+  .meal-table { font-size: 10pt; }
+  .budget-summary { grid-template-columns: repeat(3, 1fr); }
+  .habits-today-list, .grocery-list { break-inside: avoid; }
+  @page { margin: 1cm; }
+}

@@ -1,0 +1,265 @@
+{
+  "version": 6,
+  "description": "ADHD-Friendly week — short blocks, frequent breaks, brain dump sessions",
+  "events": [
+    {
+      "id": "tpl_adhd_1",
+      "title": "Morning Routine",
+      "date": "2026-10-06",
+      "startTime": "07:00",
+      "endTime": "07:30",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_adhd_2",
+      "title": "Focus Block 1",
+      "date": "2026-10-06",
+      "startTime": "08:00",
+      "endTime": "09:00",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected",
+      "description": "50 min work + 10 min break"
+    },
+    {
+      "id": "tpl_adhd_3",
+      "title": "Movement Break",
+      "date": "2026-10-06",
+      "startTime": "09:00",
+      "endTime": "09:15",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_adhd_4",
+      "title": "Focus Block 2",
+      "date": "2026-10-06",
+      "startTime": "09:15",
+      "endTime": "10:15",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_adhd_5",
+      "title": "Brain Dump + Planning",
+      "date": "2026-10-06",
+      "startTime": "10:15",
+      "endTime": "10:30",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_adhd_6",
+      "title": "Lunch & Recharge",
+      "date": "2026-10-06",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "allDay": false,
+      "category": "food-meals",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_adhd_7",
+      "title": "Afternoon Focus",
+      "date": "2026-10-06",
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "allDay": false,
+      "category": "work-money",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "protected"
+    },
+    {
+      "id": "tpl_adhd_8",
+      "title": "Walk / Exercise",
+      "date": "2026-10-06",
+      "startTime": "16:00",
+      "endTime": "16:30",
+      "allDay": false,
+      "category": "personal-other",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "weekdays",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    },
+    {
+      "id": "tpl_adhd_9",
+      "title": "Wind Down",
+      "date": "2026-10-06",
+      "startTime": "21:00",
+      "endTime": "22:00",
+      "allDay": false,
+      "category": "entertainment",
+      "type": "event",
+      "completed": false,
+      "recurrence": {
+        "freq": "daily",
+        "interval": 1,
+        "daysOfWeek": [],
+        "endDate": null
+      },
+      "seriesId": null,
+      "isException": false,
+      "excludedDates": [],
+      "flexibility": "flexible"
+    }
+  ],
+  "goals": [
+    {
+      "id": "tpl_adhd_g1",
+      "title": "Work",
+      "category": "work-money",
+      "targetHoursPerWeek": 30,
+      "description": "Manageable work hours",
+      "active": true
+    },
+    {
+      "id": "tpl_adhd_g2",
+      "title": "Personal",
+      "category": "personal-other",
+      "targetHoursPerWeek": 10,
+      "description": "Self-care and recharge",
+      "active": true
+    }
+  ],
+  "habits": [
+    {
+      "id": "tpl_adhd_h1",
+      "name": "Brain dump",
+      "category": "personal-other",
+      "targetFrequency": {
+        "type": "daily",
+        "timesPerWeek": 7,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "duration": 10,
+      "priority": "high",
+      "status": "active",
+      "startDate": "2026-10-06"
+    },
+    {
+      "id": "tpl_adhd_h2",
+      "name": "Movement break",
+      "category": "personal-other",
+      "targetFrequency": {
+        "type": "weekdays",
+        "timesPerWeek": 5,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "duration": 15,
+      "priority": "medium",
+      "status": "active",
+      "startDate": "2026-10-06"
+    }
+  ],
+  "preferences": {
+    "sleepHours": 8,
+    "workHoursTarget": 6
+  },
+  "categories": null,
+  "habitLog": [],
+  "aiHistory": []
+}
